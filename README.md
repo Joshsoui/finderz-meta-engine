@@ -30,6 +30,16 @@ Voer npm ci en daarna npm run dev uit.
 
 Kopieer .env.example naar .env.local voor echte koppelingen. Plaats nooit tokens in Git.
 
+## Render
+
+De repository bevat een render.yaml Blueprint voor een Node web service in Frankfurt.
+De Blueprint gebruikt voorlopig het gratis prototypeplan, bouwt met npm install en npm run build,
+start met npm start en controleert de service via /api/meta/status.
+
+Meta- en OpenAI-sleutels worden bewust niet in render.yaml opgeslagen. Voeg deze later als
+secret environment variables toe wanneer de echte koppelingen worden geactiveerd:
+META_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID, META_PIXEL_ID en OPENAI_API_KEY.
+
 ## Productievolgorde
 
 1. Meta-advertentieaccount en Facebookpagina koppelen.
