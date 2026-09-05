@@ -3,10 +3,10 @@
 import { useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit, Check,
-  ChevronRight, CircleDollarSign, Clock3, Euro, Gauge, ImageIcon,
+  ChevronRight, CircleDollarSign, Clock3, Download, Euro, Gauge, ImageIcon,
   LayoutDashboard, Megaphone, MousePointerClick, Pause, Play, Plus,
-  RefreshCw, Search, Settings2, ShieldCheck, Sparkles, Target,
-  TrendingUp, Users, WandSparkles, Zap,
+  RefreshCw, Search, Settings2, ShieldCheck, Sparkles, Target, Upload,
+  TrendingUp, Users, WandSparkles, Zap, LoaderCircle,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -24,6 +24,9 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import { Toaster, toast } from "sonner";
+import {
+  CREATIVE_DIMENSIONS, downloadCreative, type CreativeFormat,
+} from "@/lib/creative-renderer";
 
 type CampaignStatus = "live" | "attention" | "paused" | "draft";
 
@@ -43,6 +46,11 @@ type Campaign = {
   usps: [string, string, string];
   primaryText: string;
   headline: string;
+  adDescription?: string;
+  vacancyDescription?: string;
+  backgroundPrompt?: string;
+  backgroundImage?: string;
+  logoImage?: string;
   recommendation: string;
   nextAction: string;
 };
@@ -149,37 +157,106 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
   const [description, setDescription] = useState(
     "Werk zelfstandig op locatie, los technische storingen op en onderhoud installaties. Mbo 2 elektrotechniek, rijbewijs B en klantgerichte instelling."
   );
+  const [logoImage, setLogoImage] = useState<string>();
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  function createCampaign() {
-    const numericFee = Math.max(Number(fee) || 0, 0);
-    if (!title.trim() || !location.trim() || numericFee <= 0) {
-      toast.error("Vul minimaal de functie, locatie en fee in.");
+  function readLogo(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2_000_000) {
+      toast.error("Gebruik een PNG, JPG, WebP of SVG van maximaal 2 MB.");
       return;
     }
-    const maxBudget = numericFee * 0.2;
-    onCreate({
-      id: "fk-" + String(Date.now()).slice(-5),
-      title: title.trim(),
-      location: location.trim(),
-      salary: salary.trim() || "Salaris in overleg",
-      status: "draft",
-      fee: numericFee,
-      maxBudget,
-      spend: 0,
-      impressions: 0,
-      clicks: 0,
-      leads: 0,
-      targetCpl: Math.max(Math.round(maxBudget / 28), 25),
-      usps: [salary.trim() || "Goed salaris", "Uitzicht op vast contract", "Persoonlijke begeleiding"],
-      primaryText: "Toe aan een nieuwe stap als " + title.trim() + " in " + location.trim() + "? Bekijk wat deze functie jou biedt en laat eenvoudig je gegevens achter.",
-      headline: title.trim() + " | " + location.trim(),
-      recommendation: "Vacature geanalyseerd. Controleer de gegenereerde creative en teksten voordat de campagne naar Meta wordt gestuurd.",
-      nextAction: "Controleer & publiceer",
-    });
-    setOpen(false);
-    toast.success("Campagneconcept gegenereerd", {
-      description: "Tekst, USP's, creative-opbouw en budgetkader staan klaar.",
-    });
+    const reader = new FileReader();
+    reader.onload = () => setLogoImage(String(reader.result));
+    reader.readAsDataURL(file);
+  }
+
+  async function createCampaign() {
+    const numericFee = Math.max(Number(fee) || 0, 0);
+    if (!title.trim() || !location.trim() || !description.trim() || numericFee <= 0) {
+      toast.error("Vul de functie, locatie, vacaturetekst en fee in.");
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      const vacancy = {
+        title: title.trim(), location: location.trim(), salary: salary.trim(),
+        description: description.trim(), fee: numericFee,
+      };
+      const analysisResponse = await fetch("/api/analyze-vacancy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(vacancy),
+      });
+      const analysisPayload = await analysisResponse.json() as {
+        analysis?: {
+          maxBudget: number;
+          targetCpl: number;
+          usps: [string, string, string];
+          copy: { primaryText: string; headline: string; description: string };
+          creative: { backgroundPrompt: string };
+        };
+        error?: string;
+      };
+      if (!analysisResponse.ok || !analysisPayload.analysis) {
+        throw new Error(analysisPayload.error || "De vacature kon niet worden geanalyseerd.");
+      }
+
+      const analysis = analysisPayload.analysis;
+      let backgroundImage: string | undefined;
+      let backgroundError: string | undefined;
+      const backgroundResponse = await fetch("/api/generate-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: analysis.creative.backgroundPrompt,
+          title: vacancy.title,
+          location: vacancy.location,
+        }),
+      });
+      const backgroundPayload = await backgroundResponse.json() as { image?: string; error?: string };
+      if (backgroundResponse.ok && backgroundPayload.image) backgroundImage = backgroundPayload.image;
+      else backgroundError = backgroundPayload.error;
+
+      onCreate({
+        id: "fk-" + String(Date.now()).slice(-5),
+        title: vacancy.title,
+        location: vacancy.location,
+        salary: vacancy.salary || "Salaris in overleg",
+        status: "draft",
+        fee: numericFee,
+        maxBudget: analysis.maxBudget,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        leads: 0,
+        targetCpl: analysis.targetCpl,
+        usps: analysis.usps,
+        primaryText: analysis.copy.primaryText,
+        headline: analysis.copy.headline,
+        adDescription: analysis.copy.description,
+        vacancyDescription: vacancy.description,
+        backgroundPrompt: analysis.creative.backgroundPrompt,
+        backgroundImage,
+        logoImage,
+        recommendation: "Concept staat klaar. Controleer beeld en teksten voordat je publiceert naar Meta.",
+        nextAction: "Controleer & publiceer",
+      });
+      setOpen(false);
+      if (backgroundImage) {
+        toast.success("Complete advertentieset gegenereerd", {
+          description: "Beeld, copy, USP's en drie exportformaten staan klaar.",
+        });
+      } else {
+        toast.warning("Campagneconcept staat klaar", {
+          description: backgroundError || "Voeg de OpenAI-sleutel toe om de achtergrond te genereren.",
+        });
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Genereren is niet gelukt.");
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   return (
@@ -222,6 +299,12 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
           <label className="field-label">Vacatureomschrijving
             <textarea className="field-input min-h-32 resize-none leading-6" value={description} onChange={(event) => setDescription(event.target.value)} />
           </label>
+          <label className="field-label">Finderz Keeperz-logo <span className="font-normal text-[#607b8d]">optioneel · PNG, JPG, WebP of SVG</span>
+            <span className="logo-upload">
+              <Upload className="size-4" />{logoImage ? "Logo toegevoegd · wijzigen" : "Logo uploaden"}
+              <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => readLogo(event.target.files?.[0])} />
+            </span>
+          </label>
           <div className="rounded-xl border border-[#12445e] bg-[#0b2738] p-4">
             <div className="flex gap-3">
               <BrainCircuit className="mt-0.5 size-5 shrink-0 text-[#5bc0df]" />
@@ -233,8 +316,9 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
           </div>
         </div>
         <div className="border-t border-white/10 p-6">
-          <button className="primary-button w-full justify-center" onClick={createCampaign}>
-            <Sparkles className="size-4" />Analyseer en genereer
+          <button className="primary-button w-full justify-center disabled:cursor-wait disabled:opacity-60" onClick={createCampaign} disabled={isGenerating}>
+            {isGenerating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {isGenerating ? "Advertentieset wordt gemaakt…" : "Analyseer en genereer"}
           </button>
         </div>
       </SheetContent>
@@ -242,20 +326,26 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
   );
 }
 
-function CreativePreview({ campaign }: { campaign: Campaign }) {
+function CreativePreview({ campaign, format }: { campaign: Campaign; format: CreativeFormat }) {
+  const ratio = format === "1:1" ? "1 / 1" : format === "1.91:1" ? "1.91 / 1" : "9 / 16";
   return (
-    <div className="creative-shell">
-      <div className="creative-bg" />
+    <div className="creative-shell" style={{ aspectRatio: ratio }}>
+      <div
+        className="creative-bg"
+        style={campaign.backgroundImage ? { backgroundImage: `url(${campaign.backgroundImage})` } : undefined}
+      />
       <div className="creative-shade" />
       <div className="creative-content">
-        <FinderzMark />
+        <div className="creative-logo">
+          {campaign.logoImage ? <img src={campaign.logoImage} alt="Finderz Keeperz" /> : <FinderzMark />}
+        </div>
         <div className="mt-auto">
           <div className="creative-location">{campaign.location}</div>
           <h3>{campaign.title}</h3>
           <div className="creative-usps">
             {campaign.usps.map((usp) => <span key={usp}><Check className="size-3.5" />{usp}</span>)}
           </div>
-          <div className="creative-cta">Bekijk vacature<ChevronRight className="size-4" /></div>
+          <div className="creative-cta">Solliciteer nu<ChevronRight className="size-4" /></div>
         </div>
       </div>
     </div>
@@ -281,6 +371,9 @@ function TrendChart() {
 export default function Home() {
   const [campaigns, setCampaigns] = useState(initialCampaigns);
   const [selectedId, setSelectedId] = useState(initialCampaigns[0].id);
+  const [creativeFormat, setCreativeFormat] = useState<CreativeFormat>("1:1");
+  const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
+  const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
   const selected = campaigns.find((campaign) => campaign.id === selectedId) ?? campaigns[0];
   const totals = useMemo(() => {
     const spend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
@@ -298,6 +391,94 @@ export default function Home() {
   function updateSelected(update: Partial<Campaign>, message: string) {
     setCampaigns((current) => current.map((campaign) => campaign.id === selected.id ? { ...campaign, ...update } : campaign));
     toast.success(message);
+  }
+
+  function patchSelected(update: Partial<Campaign>) {
+    setCampaigns((current) => current.map((campaign) => campaign.id === selected.id ? { ...campaign, ...update } : campaign));
+  }
+
+  async function regenerateBackground() {
+    setIsGeneratingBackground(true);
+    try {
+      const response = await fetch("/api/generate-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: selected.backgroundPrompt || `Realistische recruitmentfoto van een ${selected.title} tijdens het werk. Nederlandse werkomgeving, ruimte voor advertentietekst.`,
+          title: selected.title,
+          location: selected.location,
+        }),
+      });
+      const payload = await response.json() as { image?: string; error?: string };
+      if (!response.ok || !payload.image) throw new Error(payload.error || "Achtergrond genereren is niet gelukt.");
+      patchSelected({ backgroundImage: payload.image });
+      toast.success("Nieuwe achtergrond gegenereerd");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Achtergrond genereren is niet gelukt.");
+    } finally {
+      setIsGeneratingBackground(false);
+    }
+  }
+
+  async function regenerateCopy() {
+    setIsGeneratingCopy(true);
+    try {
+      const response = await fetch("/api/analyze-vacancy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: selected.title,
+          location: selected.location,
+          salary: selected.salary,
+          description: selected.vacancyDescription || selected.primaryText,
+          fee: selected.fee,
+        }),
+      });
+      const payload = await response.json() as {
+        analysis?: {
+          copy: { primaryText: string; headline: string; description: string };
+          usps: [string, string, string];
+          creative: { backgroundPrompt: string };
+        };
+        error?: string;
+      };
+      if (!response.ok || !payload.analysis) throw new Error(payload.error || "Tekst genereren is niet gelukt.");
+      patchSelected({
+        primaryText: payload.analysis.copy.primaryText,
+        headline: payload.analysis.copy.headline,
+        adDescription: payload.analysis.copy.description,
+        usps: payload.analysis.usps,
+        backgroundPrompt: payload.analysis.creative.backgroundPrompt,
+      });
+      toast.success("Nieuwe tekstvariant gegenereerd");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Tekst genereren is niet gelukt.");
+    } finally {
+      setIsGeneratingCopy(false);
+    }
+  }
+
+  async function exportCreative() {
+    try {
+      await downloadCreative(selected, creativeFormat);
+      toast.success(`${CREATIVE_DIMENSIONS[creativeFormat].label} gedownload`);
+    } catch {
+      toast.error("De advertentie kon niet worden geëxporteerd.");
+    }
+  }
+
+  function replaceLogo(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2_000_000) {
+      toast.error("Gebruik een afbeelding van maximaal 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      patchSelected({ logoImage: String(reader.result) });
+      toast.success("Logo bijgewerkt");
+    };
+    reader.readAsDataURL(file);
   }
 
   const budgetUsed = selected.maxBudget ? Math.min((selected.spend / selected.maxBudget) * 100, 100) : 0;
@@ -437,14 +618,41 @@ export default function Home() {
                     </div>
                   </TabsContent>
                   <TabsContent value="creative" className="p-5">
-                    <div className="grid gap-6 lg:grid-cols-[310px_minmax(0,1fr)]">
-                      <CreativePreview campaign={selected} />
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div className="format-switch" aria-label="Advertentieformaat">
+                        {(Object.keys(CREATIVE_DIMENSIONS) as CreativeFormat[]).map((format) => (
+                          <button key={format} className={creativeFormat === format ? "active" : ""} onClick={() => setCreativeFormat(format)}>
+                            {format}<span>{CREATIVE_DIMENSIONS[format].label.split(" ")[0]}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <label className="secondary-button">
+                          <Upload className="size-4" />Logo wijzigen
+                          <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => replaceLogo(event.target.files?.[0])} />
+                        </label>
+                        <button className="primary-button" onClick={exportCreative}><Download className="size-4" />Download PNG</button>
+                      </div>
+                    </div>
+                    <div className="grid gap-6 lg:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
+                      <div className="creative-stage">
+                        <CreativePreview campaign={selected} format={creativeFormat} />
+                        {!selected.backgroundImage && <div className="creative-notice"><ImageIcon className="size-4" />Nog geen AI-achtergrond</div>}
+                      </div>
                       <div className="space-y-5">
-                        <div><span className="content-label">Primaire tekst</span><p className="content-box">{selected.primaryText}</p></div>
-                        <div><span className="content-label">Kop</span><p className="content-box">{selected.headline}</p></div>
+                        <label><span className="content-label">Primaire tekst</span><textarea className="content-input min-h-28 resize-y" value={selected.primaryText} onChange={(event) => patchSelected({ primaryText: event.target.value })} /></label>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <button className="secondary-button justify-center" onClick={() => toast.success("Nieuwe tekstvariant staat klaar.")}><Sparkles className="size-4" />Nieuwe tekstvariant</button>
-                          <button className="secondary-button justify-center" onClick={() => toast.success("Nieuwe beeldbriefing gegenereerd.")}><RefreshCw className="size-4" />Nieuwe achtergrond</button>
+                          <label><span className="content-label">Kop</span><input className="content-input" value={selected.headline} onChange={(event) => patchSelected({ headline: event.target.value })} /></label>
+                          <label><span className="content-label">Beschrijving</span><input className="content-input" value={selected.adDescription || "Bekijk de vacature"} onChange={(event) => patchSelected({ adDescription: event.target.value })} /></label>
+                        </div>
+                        <div><span className="content-label">USP-blokken</span><div className="grid gap-2">{selected.usps.map((usp, index) => <input key={index} className="content-input" value={usp} onChange={(event) => {
+                          const usps = [...selected.usps] as [string, string, string];
+                          usps[index] = event.target.value;
+                          patchSelected({ usps });
+                        }} />)}</div></div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <button className="secondary-button justify-center disabled:cursor-wait disabled:opacity-60" onClick={regenerateCopy} disabled={isGeneratingCopy}>{isGeneratingCopy ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}Nieuwe tekstvariant</button>
+                          <button className="secondary-button justify-center disabled:cursor-wait disabled:opacity-60" onClick={regenerateBackground} disabled={isGeneratingBackground}>{isGeneratingBackground ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Nieuwe achtergrond</button>
                         </div>
                       </div>
                     </div>
