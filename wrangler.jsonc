@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "finderz-meta-engine",
-  "compatibility_date": "2026-09-07",
+  "compatibility_date": "2026-05-22",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
   "account_id": "db40d46d6a72c39f89b62a6829ea9eee",

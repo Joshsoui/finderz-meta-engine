@@ -71,39 +71,18 @@ function drawFallbackBackground(context: CanvasRenderingContext2D, width: number
 
 async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, width: number, height: number) {
   const pad = Math.round(width * 0.055);
-  if (data.logoImage) {
-    try {
-      const logo = await loadImage(data.logoImage);
-      const maxWidth = width * 0.24;
-      const maxHeight = height * 0.075;
-      const scale = Math.min(maxWidth / logo.naturalWidth, maxHeight / logo.naturalHeight);
-      const drawWidth = logo.naturalWidth * scale;
-      const drawHeight = logo.naturalHeight * scale;
-      context.drawImage(logo, width - pad - drawWidth, pad, drawWidth, drawHeight);
-      return;
-    } catch {
-      // Fall back to the built-in Finderz wordmark.
-    }
+  const source = data.logoImage || "/finderzkeeperz-logo.png";
+  try {
+    const logo = await loadImage(source);
+    const maxWidth = width * 0.24;
+    const maxHeight = height * 0.075;
+    const scale = Math.min(maxWidth / logo.naturalWidth, maxHeight / logo.naturalHeight);
+    const drawWidth = logo.naturalWidth * scale;
+    const drawHeight = logo.naturalHeight * scale;
+    context.drawImage(logo, width - pad - drawWidth, pad, drawWidth, drawHeight);
+  } catch {
+    // No logo could be loaded; leave the corner empty rather than fail the export.
   }
-
-  const symbol = Math.max(44, Math.round(Math.min(width, height) * 0.07));
-  const x = width - pad - symbol;
-  const y = pad;
-  context.fillStyle = "#006192";
-  roundRect(context, x, y, symbol, symbol, symbol * 0.22);
-  context.fill();
-  context.fillStyle = "#ffffff";
-  context.font = `900 ${Math.round(symbol * 0.5)}px Arial, sans-serif`;
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText("F", x + symbol / 2, y + symbol / 2 + 1);
-  context.textAlign = "right";
-  context.textBaseline = "alphabetic";
-  context.font = `900 ${Math.round(symbol * 0.28)}px Arial, sans-serif`;
-  context.fillText("FINDERZ", x - symbol * 0.16, y + symbol * 0.43);
-  context.fillStyle = "#9ed5db";
-  context.font = `700 ${Math.round(symbol * 0.19)}px Arial, sans-serif`;
-  context.fillText("KEEPERZ", x - symbol * 0.16, y + symbol * 0.74);
 }
 
 export async function renderCreative(data: CreativeData, format: CreativeFormat) {

@@ -143,17 +143,10 @@ function statusLabel(status: CampaignStatus) {
 }
 
 function FinderzMark({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="finderz-symbol" aria-hidden="true"><span>F</span></div>
-      {!compact && (
-        <div className="leading-none">
-          <div className="text-[15px] font-black tracking-[0.18em] text-white">FINDERZ</div>
-          <div className="mt-1 text-[11px] font-bold tracking-[0.28em] text-[#6fb3c0]">KEEPERZ</div>
-        </div>
-      )}
-    </div>
-  );
+  if (compact) {
+    return <div className="finderz-symbol" aria-hidden="true"><span>F</span></div>;
+  }
+  return <img src="/finderzkeeperz-logo.png" alt="Finderz Keeperz" className="h-9 w-auto" />;
 }
 
 function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void }) {
@@ -283,7 +276,7 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
       <SheetTrigger asChild>
         <button className="primary-button"><Plus className="size-4" />Nieuwe campagne</button>
       </SheetTrigger>
-      <SheetContent className="w-full border-[#18384c] bg-[#071927] p-0 text-white sm:max-w-xl">
+      <SheetContent className="w-full border-[#23526f] bg-[#0e324e] p-0 text-white sm:max-w-xl">
         <SheetHeader className="border-b border-white/10 px-6 py-6">
           <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]">
             <WandSparkles className="size-5" />
@@ -325,7 +318,7 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
               <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => readLogo(event.target.files?.[0])} disabled={isUploadingLogo} />
             </span>
           </label>
-          <div className="rounded-xl border border-[#12445e] bg-[#0b2738] p-4">
+          <div className="rounded-xl border border-[#196085] bg-[#13425e] p-4">
             <div className="flex gap-3">
               <BrainCircuit className="mt-0.5 size-5 shrink-0 text-[#5bc0df]" />
               <div>
@@ -381,7 +374,7 @@ function TrendChart() {
         <defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1aa6d1" stopOpacity="0.3" /><stop offset="100%" stopColor="#1aa6d1" stopOpacity="0" /></linearGradient></defs>
         <path d={"M " + points.replaceAll(" ", " L ") + " L 508,110 L 2,110 Z"} fill="url(#area)" />
         <polyline points={points} fill="none" stroke="#35b7df" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="508" cy="12" r="5" fill="#071927" stroke="#72d1ec" strokeWidth="3" />
+        <circle cx="508" cy="12" r="5" fill="#0e324e" stroke="#72d1ec" strokeWidth="3" />
       </svg>
       <div className="mt-2 flex justify-between text-xs text-[#6f8798]"><span>25 aug</span><span>28 aug</span><span>31 aug</span><span>3 sep</span><span>5 sep</span></div>
     </div>
@@ -579,7 +572,7 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#081722] text-[#91aabb]">
+      <div className="flex min-h-screen items-center justify-center bg-[#113047] text-[#91aabb]">
         <LoaderCircle className="size-6 animate-spin" />
       </div>
     );
@@ -587,7 +580,7 @@ export default function Home() {
 
   if (!selected) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#081722] px-6 text-center text-white">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#113047] px-6 text-center text-white">
         <FinderzMark />
         <h1 className="text-xl font-semibold">Nog geen campagnes</h1>
         <p className="max-w-sm text-sm text-[#91aabb]">Maak je eerste campagne aan om het dashboard te vullen met echte data.</p>
@@ -603,7 +596,7 @@ export default function Home() {
 
   return (
     <SidebarProvider>
-      <Sidebar collapsible="icon" className="border-r border-white/8 bg-[#06131f]">
+      <Sidebar collapsible="icon" className="border-r border-white/8 bg-[#0d2b45]">
         <SidebarHeader className="h-[74px] justify-center border-b border-white/8 px-5">
           <div className="group-data-[collapsible=icon]:hidden"><FinderzMark /></div>
           <div className="hidden group-data-[collapsible=icon]:block"><FinderzMark compact /></div>
@@ -624,7 +617,7 @@ export default function Home() {
                     <SidebarMenuButton
                       isActive={item.active}
                       tooltip={item.label}
-                      className="h-10 text-[#91aabb] data-[active=true]:bg-[#0c3045] data-[active=true]:text-white hover:bg-white/5 hover:text-white"
+                      className="h-10 text-[#91aabb] data-[active=true]:bg-[#134b6c] data-[active=true]:text-white hover:bg-white/5 hover:text-white"
                       onClick={() => item.active ? undefined : toast.info(item.label + " is onderdeel van de volgende bouwslag.")}
                     >
                       <item.icon /><span>{item.label}</span>
@@ -654,12 +647,12 @@ export default function Home() {
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset className="min-w-0 bg-[#081722]">
-        <header className="sticky top-0 z-30 flex h-[74px] items-center border-b border-white/8 bg-[#081722]/95 px-4 backdrop-blur md:px-7">
+      <SidebarInset className="min-w-0 bg-[#113047]">
+        <header className="sticky top-0 z-30 flex h-[74px] items-center border-b border-white/8 bg-[#113047]/95 px-4 backdrop-blur md:px-7">
           <SidebarTrigger className="mr-3 text-[#91aabb] hover:bg-white/5 hover:text-white" />
           <div className="min-w-0"><h1 className="truncate text-lg font-semibold tracking-tight text-white">Meta Campaign Control</h1><p className="hidden text-xs text-[#6f8798] sm:block">Vrijdag 5 september · laatste analyse 2 min geleden</p></div>
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-full border border-[#1b4760] bg-[#0b2738] px-3 py-1.5 text-xs font-semibold text-[#82cbe1] sm:flex"><span className="size-1.5 rounded-full bg-[#35b7df] shadow-[0_0_8px_#35b7df]" />Sandbox actief</div>
+            <div className="hidden items-center gap-2 rounded-full border border-[#256184] bg-[#13425e] px-3 py-1.5 text-xs font-semibold text-[#82cbe1] sm:flex"><span className="size-1.5 rounded-full bg-[#35b7df] shadow-[0_0_8px_#35b7df]" />Sandbox actief</div>
             <NewCampaignSheet onCreate={addCampaign} />
           </div>
         </header>
@@ -684,7 +677,7 @@ export default function Home() {
               <article className="panel overflow-hidden">
                 <div className="panel-header">
                   <div><div className="eyebrow"><Activity className="size-3.5" />Live overzicht</div><h2>Campagnes</h2></div>
-                  <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#06131f] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek campagne" /></div>
+                  <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#0d2b45] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek campagne" /></div>
                 </div>
                 <Table>
                   <TableHeader><TableRow className="border-white/8 hover:bg-transparent">
@@ -694,7 +687,7 @@ export default function Home() {
                     const rowCpl = campaign.leads ? campaign.spend / campaign.leads : 0;
                     const used = campaign.maxBudget ? Math.round((campaign.spend / campaign.maxBudget) * 100) : 0;
                     return (
-                      <TableRow key={campaign.id} className={"cursor-pointer border-white/8 hover:bg-[#0c2636] " + (campaign.id === selected.id ? "bg-[#0b2332]" : "")} onClick={() => setSelectedId(campaign.id)}>
+                      <TableRow key={campaign.id} className={"cursor-pointer border-white/8 hover:bg-[#14405c] " + (campaign.id === selected.id ? "bg-[#133d58]" : "")} onClick={() => setSelectedId(campaign.id)}>
                         <TableCell className="px-5 py-4"><div className="font-semibold text-white">{campaign.title}</div><div className="mt-1 text-xs text-[#6f8798]">{campaign.location}</div></TableCell>
                         <TableCell><span className={"status status-" + campaign.status}><span />{statusLabel(campaign.status)}</span></TableCell>
                         <TableCell className="font-medium text-[#c4d1d9]">{euro.format(campaign.spend)}</TableCell>
@@ -725,7 +718,7 @@ export default function Home() {
                         </div>
                         <TrendChart />
                       </div>
-                      <div className="rounded-xl border border-white/8 bg-[#071927] p-5">
+                      <div className="rounded-xl border border-white/8 bg-[#0e324e] p-5">
                         <div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Budgetkader</p><p className="mt-1 text-xs text-[#607b8d]">Maximaal 20% van fee</p></div><ShieldCheck className="size-5 text-[#35b7df]" /></div>
                         <div className="mt-6 flex items-end justify-between"><div><span className="text-2xl font-semibold text-white">{euro.format(selected.spend)}</span><span className="ml-1 text-sm text-[#6f8798]">/ {euro.format(selected.maxBudget)}</span></div><span className="text-sm font-bold text-[#73cbe5]">{Math.round(budgetUsed)}%</span></div>
                         <Progress value={budgetUsed} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />
@@ -789,7 +782,7 @@ export default function Home() {
             <aside className="space-y-6">
               <article className="panel p-5">
                 <div className="flex items-start justify-between gap-4"><div><div className="eyebrow"><BrainCircuit className="size-3.5" />Automatische analyse</div><h2 className="mt-2">Aanbevolen actie</h2></div><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]"><Zap className="size-5" /></div></div>
-                <div className="mt-5 rounded-xl border border-[#174864] bg-[#0b2738] p-4"><p className="text-sm leading-6 text-[#bbced9]">{selected.recommendation}</p></div>
+                <div className="mt-5 rounded-xl border border-[#206389] bg-[#13425e] p-4"><p className="text-sm leading-6 text-[#bbced9]">{selected.recommendation}</p></div>
                 <button className="primary-button mt-4 w-full justify-center" onClick={() => {
                   if (selected.status === "paused") updateSelected({ status: "draft", recommendation: "Campagne staat klaar voor een nieuwe creative en teksthoek." }, "Campagne teruggezet naar concept");
                   else if (selected.status === "draft") updateSelected({ status: "live", recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." }, "Campagne gestart in sandbox");
