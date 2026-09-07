@@ -3,6 +3,14 @@ import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
 import { generateCampaign, type VacancyInput } from "@/lib/campaign-engine";
 
+type CreateCampaignInput = VacancyInput & {
+  usps?: [string, string, string];
+  copy?: { primaryText: string; headline: string; description: string };
+  backgroundPrompt?: string;
+  backgroundImageUrl?: string;
+  logoImageUrl?: string;
+};
+
 export async function GET() {
   try {
     const db = await getDb();
@@ -15,29 +23,43 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const input = (await request.json()) as VacancyInput;
-    if (!input.title?.trim() || !input.location?.trim() || !input.description?.trim() || !Number.isFinite(input.fee) || input.fee <= 0) {
+    const input = (await request.json()) as Partial<CreateCampaignInput>;
+    if (!input.title?.trim() || !input.location?.trim() || !input.description?.trim() || !Number.isFinite(input.fee) || Number(input.fee) <= 0) {
       return Response.json({ error: "Complete vacancy data and a positive fee are required" }, { status: 400 });
     }
-    const generated = generateCampaign(input);
+    const vacancy: VacancyInput = {
+      title: input.title,
+      location: input.location,
+      salary: input.salary,
+      description: input.description,
+      fee: Number(input.fee),
+      targetLeads: input.targetLeads,
+    };
+    const generated = generateCampaign(vacancy);
+    const usps = input.usps && input.usps.length === 3 ? input.usps : generated.usps;
+    const copy = input.copy ?? generated.copy;
+    const backgroundPrompt = input.backgroundPrompt ?? generated.creative.backgroundPrompt;
+
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
     const db = await getDb();
     const [campaign] = await db.insert(campaigns).values({
       id,
-      title: input.title.trim(),
-      location: input.location.trim(),
-      salary: input.salary?.trim() || "",
-      description: input.description.trim(),
+      title: vacancy.title.trim(),
+      location: vacancy.location.trim(),
+      salary: vacancy.salary?.trim() || "",
+      description: vacancy.description.trim(),
       status: "draft",
-      feeCents: Math.round(input.fee * 100),
+      feeCents: Math.round(vacancy.fee * 100),
       maxBudgetCents: Math.round(generated.maxBudget * 100),
       targetCplCents: Math.round(generated.targetCpl * 100),
-      primaryText: generated.copy.primaryText,
-      headline: generated.copy.headline,
-      descriptionText: generated.copy.description,
-      uspsJson: JSON.stringify(generated.usps),
-      creativePrompt: generated.creative.backgroundPrompt,
+      primaryText: copy.primaryText,
+      headline: copy.headline,
+      descriptionText: copy.description,
+      uspsJson: JSON.stringify(usps),
+      creativePrompt: backgroundPrompt,
+      backgroundImageUrl: input.backgroundImageUrl,
+      logoImageUrl: input.logoImageUrl,
       createdAt: now,
       updatedAt: now,
     }).returning();

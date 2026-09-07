@@ -151,6 +151,7 @@ button { cursor: pointer; }
 .status-attention { border-color: rgba(223,152,38,.2); background: rgba(223,152,38,.08); color: #e7a43a; }
 .status-paused { border-color: rgba(213,86,92,.2); background: rgba(213,86,92,.08); color: #d9787d; }
 .status-draft { border-color: rgba(121,146,163,.2); background: rgba(121,146,163,.08); color: #91aabb; }
+.status-completed { border-color: rgba(121,146,163,.2); background: rgba(121,146,163,.08); color: #91aabb; }
 .table-heading { font-size: .68rem; font-weight: 650; letter-spacing: .07em; color: #607b8d; text-transform: uppercase; }
 .budget-stat { border: 1px solid rgba(255,255,255,.07); border-radius: .7rem; background: rgba(255,255,255,.025); padding: .7rem; }
 .budget-stat span { display: block; margin-bottom: .25rem; color: #617e90; font-size: .7rem; }

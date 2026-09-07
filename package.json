@@ -12,6 +12,7 @@
     "deploy": "vinext build && wrangler deploy",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "typecheck": "wrangler types && tsc --noEmit",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit, Check,
   ChevronRight, CircleDollarSign, Clock3, Download, Euro, Gauge, ImageIcon,
@@ -28,7 +28,27 @@ import {
   CREATIVE_DIMENSIONS, downloadCreative, type CreativeFormat,
 } from "@/lib/creative-renderer";
 
-type CampaignStatus = "live" | "attention" | "paused" | "draft";
+type CampaignStatus = "live" | "attention" | "paused" | "draft" | "completed";
+
+type CampaignRow = {
+  id: string;
+  title: string;
+  location: string;
+  salary: string;
+  description: string;
+  status: CampaignStatus;
+  feeCents: number;
+  maxBudgetCents: number;
+  spentCents: number;
+  targetCplCents: number;
+  primaryText: string;
+  headline: string;
+  descriptionText: string;
+  uspsJson: string;
+  creativePrompt: string;
+  backgroundImageUrl: string | null;
+  logoImageUrl: string | null;
+};
 
 type Campaign = {
   id: string;
@@ -55,71 +75,58 @@ type Campaign = {
   nextAction: string;
 };
 
-const initialCampaigns: Campaign[] = [
-  {
-    id: "fk-1048",
-    title: "Elektromonteur Infra",
-    location: "IJmuiden",
-    salary: "€ 3.500 – € 4.500",
-    status: "live",
-    fee: 8000,
-    maxBudget: 1600,
-    spend: 1048,
-    impressions: 42860,
-    clicks: 914,
-    leads: 31,
-    targetCpl: 50,
-    usps: ["Tot € 4.500 bruto p/m", "25 vakantiedagen + 13 ADV", "Elektrische bus van de zaak"],
-    primaryText: "Werk aan bruggen, sluizen en gemalen rond het Noordzeekanaal. Verdien tot € 4.500 bruto per maand en krijg direct een elektrische servicebus.",
-    headline: "Elektromonteur Infra | IJmuiden",
-    recommendation: "De campagne ligt 32% onder de doel-CPL. Schaal gecontroleerd met 15% zolang de frequentie onder 2,8 blijft.",
-    nextAction: "Budget +15%",
-  },
-  {
-    id: "fk-1052",
-    title: "Productiemedewerker Dagdienst",
-    location: "Alkmaar",
-    salary: "Tot € 3.000",
-    status: "attention",
-    fee: 5500,
-    maxBudget: 1100,
-    spend: 712,
-    impressions: 31920,
-    clicks: 456,
-    leads: 12,
-    targetCpl: 45,
-    usps: ["Salaris tot € 3.000", "Werken in dagdienst", "Uitzicht op vast contract"],
-    primaryText: "Zoek je productiewerk in Alkmaar zonder ploegendienst? Start in een nuchter team en bouw aan een vaste toekomst.",
-    headline: "Productiemedewerker Dagdienst",
-    recommendation: "De CTR daalt en de frequentie loopt op. Zet een nieuwe achtergrondvariant naast de huidige winnaar.",
-    nextAction: "Nieuwe creative",
-  },
-  {
-    id: "fk-1055",
-    title: "Customer Service Medewerker Logistiek",
-    location: "Amsterdam Westpoort",
-    salary: "Tot € 3.600",
-    status: "paused",
-    fee: 6500,
-    maxBudget: 1300,
-    spend: 424,
-    impressions: 18740,
-    clicks: 188,
-    leads: 4,
-    targetCpl: 55,
-    usps: ["Tot € 3.600 bruto p/m", "Internationale logistiek", "Doorgroeimogelijkheden"],
-    primaryText: "Combineer klantcontact met internationale logistiek in Amsterdam Westpoort. Een veelzijdige rol met ruimte om door te groeien.",
-    headline: "Customer Service in de logistiek",
-    recommendation: "De kosten per lead liggen bijna twee keer boven de doelstelling. Campagne gepauzeerd voor een nieuwe invalshoek.",
-    nextAction: "Herbouw campagne",
-  },
-];
+function recommendationFor(status: CampaignStatus): { recommendation: string; nextAction: string } {
+  switch (status) {
+    case "draft":
+      return { recommendation: "Concept staat klaar. Controleer beeld en teksten voordat je publiceert naar Meta.", nextAction: "Controleer & publiceer" };
+    case "paused":
+      return { recommendation: "Campagne staat gepauzeerd.", nextAction: "Herstart campagne" };
+    case "attention":
+      return { recommendation: "Deze campagne heeft aandacht nodig. Bekijk de prestaties.", nextAction: "Bekijk campagne" };
+    case "completed":
+      return { recommendation: "Campagne is afgerond.", nextAction: "Bekijk resultaten" };
+    default:
+      return { recommendation: "Nog onvoldoende data voor een automatische aanbeveling.", nextAction: "Bekijk prestaties" };
+  }
+}
 
-const activityFeed = [
-  { time: "08:42", tone: "blue", title: "Budget gecontroleerd opgeschaald", detail: "Elektromonteur Infra · +15% dagbudget" },
-  { time: "07:15", tone: "amber", title: "Creative fatigue gedetecteerd", detail: "Productiemedewerker · frequentie 2,74" },
-  { time: "Gisteren", tone: "red", title: "Campagne automatisch gepauzeerd", detail: "Customer Service · CPL boven grens" },
-];
+function rowToCampaign(row: CampaignRow): Campaign {
+  const { recommendation, nextAction } = recommendationFor(row.status);
+  let usps: [string, string, string] = ["", "", ""];
+  try {
+    const parsed = JSON.parse(row.uspsJson);
+    if (Array.isArray(parsed) && parsed.length === 3) usps = parsed as [string, string, string];
+  } catch {
+    // keep the empty fallback
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    location: row.location,
+    salary: row.salary || "Salaris in overleg",
+    status: row.status,
+    fee: row.feeCents / 100,
+    maxBudget: row.maxBudgetCents / 100,
+    spend: row.spentCents / 100,
+    impressions: 0,
+    clicks: 0,
+    leads: 0,
+    targetCpl: row.targetCplCents / 100,
+    usps,
+    primaryText: row.primaryText,
+    headline: row.headline,
+    adDescription: row.descriptionText,
+    vacancyDescription: row.description,
+    backgroundPrompt: row.creativePrompt,
+    backgroundImage: row.backgroundImageUrl ?? undefined,
+    logoImage: row.logoImageUrl ?? undefined,
+    recommendation,
+    nextAction,
+  };
+}
+
+const activityFeed: Array<{ time: string; tone: string; title: string; detail: string }> = [];
 
 const euro = new Intl.NumberFormat("nl-NL", {
   style: "currency",
@@ -131,6 +138,7 @@ function statusLabel(status: CampaignStatus) {
   if (status === "live") return "Presteert";
   if (status === "attention") return "Actie nodig";
   if (status === "paused") return "Gepauzeerd";
+  if (status === "completed") return "Afgerond";
   return "Concept";
 }
 
@@ -159,6 +167,7 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
   );
   const [logoImage, setLogoImage] = useState<string>();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   function readLogo(file?: File) {
     if (!file) return;
@@ -167,7 +176,23 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setLogoImage(String(reader.result));
+    reader.onload = async () => {
+      setIsUploadingLogo(true);
+      try {
+        const response = await fetch("/api/upload-logo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl: String(reader.result) }),
+        });
+        const payload = await response.json() as { url?: string; error?: string };
+        if (!response.ok || !payload.url) throw new Error(payload.error || "Logo uploaden is niet gelukt.");
+        setLogoImage(payload.url);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Logo uploaden is niet gelukt.");
+      } finally {
+        setIsUploadingLogo(false);
+      }
+    };
     reader.readAsDataURL(file);
   }
 
@@ -218,30 +243,24 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
       if (backgroundResponse.ok && backgroundPayload.image) backgroundImage = backgroundPayload.image;
       else backgroundError = backgroundPayload.error;
 
-      onCreate({
-        id: "fk-" + String(Date.now()).slice(-5),
-        title: vacancy.title,
-        location: vacancy.location,
-        salary: vacancy.salary || "Salaris in overleg",
-        status: "draft",
-        fee: numericFee,
-        maxBudget: analysis.maxBudget,
-        spend: 0,
-        impressions: 0,
-        clicks: 0,
-        leads: 0,
-        targetCpl: analysis.targetCpl,
-        usps: analysis.usps,
-        primaryText: analysis.copy.primaryText,
-        headline: analysis.copy.headline,
-        adDescription: analysis.copy.description,
-        vacancyDescription: vacancy.description,
-        backgroundPrompt: analysis.creative.backgroundPrompt,
-        backgroundImage,
-        logoImage,
-        recommendation: "Concept staat klaar. Controleer beeld en teksten voordat je publiceert naar Meta.",
-        nextAction: "Controleer & publiceer",
+      const createResponse = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...vacancy,
+          usps: analysis.usps,
+          copy: analysis.copy,
+          backgroundPrompt: analysis.creative.backgroundPrompt,
+          backgroundImageUrl: backgroundImage,
+          logoImageUrl: logoImage,
+        }),
       });
+      const createPayload = await createResponse.json() as { campaign?: CampaignRow; error?: string };
+      if (!createResponse.ok || !createPayload.campaign) {
+        throw new Error(createPayload.error || "De campagne kon niet worden opgeslagen.");
+      }
+
+      onCreate(rowToCampaign(createPayload.campaign));
       setOpen(false);
       if (backgroundImage) {
         toast.success("Complete advertentieset gegenereerd", {
@@ -301,8 +320,9 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
           </label>
           <label className="field-label">Finderz Keeperz-logo <span className="font-normal text-[#607b8d]">optioneel · PNG, JPG, WebP of SVG</span>
             <span className="logo-upload">
-              <Upload className="size-4" />{logoImage ? "Logo toegevoegd · wijzigen" : "Logo uploaden"}
-              <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => readLogo(event.target.files?.[0])} />
+              {isUploadingLogo ? <LoaderCircle className="size-4 animate-spin" /> : <Upload className="size-4" />}
+              {isUploadingLogo ? "Logo uploaden…" : logoImage ? "Logo toegevoegd · wijzigen" : "Logo uploaden"}
+              <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => readLogo(event.target.files?.[0])} disabled={isUploadingLogo} />
             </span>
           </label>
           <div className="rounded-xl border border-[#12445e] bg-[#0b2738] p-4">
@@ -316,7 +336,7 @@ function NewCampaignSheet({ onCreate }: { onCreate: (campaign: Campaign) => void
           </div>
         </div>
         <div className="border-t border-white/10 p-6">
-          <button className="primary-button w-full justify-center disabled:cursor-wait disabled:opacity-60" onClick={createCampaign} disabled={isGenerating}>
+          <button className="primary-button w-full justify-center disabled:cursor-wait disabled:opacity-60" onClick={createCampaign} disabled={isGenerating || isUploadingLogo}>
             {isGenerating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {isGenerating ? "Advertentieset wordt gemaakt…" : "Analyseer en genereer"}
           </button>
@@ -368,13 +388,28 @@ function TrendChart() {
   );
 }
 
+function toApiFields(update: Partial<Campaign>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  if (update.status !== undefined) fields.status = update.status;
+  if (update.maxBudget !== undefined) fields.maxBudget = update.maxBudget;
+  if (update.spend !== undefined) fields.spend = update.spend;
+  if (update.primaryText !== undefined) fields.primaryText = update.primaryText;
+  if (update.headline !== undefined) fields.headline = update.headline;
+  if (update.adDescription !== undefined) fields.description = update.adDescription;
+  if (update.usps !== undefined) fields.usps = update.usps;
+  if (update.backgroundImage !== undefined) fields.backgroundImageUrl = update.backgroundImage;
+  if (update.logoImage !== undefined) fields.logoImageUrl = update.logoImage;
+  return fields;
+}
+
 export default function Home() {
-  const [campaigns, setCampaigns] = useState(initialCampaigns);
-  const [selectedId, setSelectedId] = useState(initialCampaigns[0].id);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [isLoading, setIsLoading] = useState(true);
   const [creativeFormat, setCreativeFormat] = useState<CreativeFormat>("1:1");
   const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
   const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
-  const selected = campaigns.find((campaign) => campaign.id === selectedId) ?? campaigns[0];
+  const selected = campaigns.find((campaign) => campaign.id === selectedId);
   const totals = useMemo(() => {
     const spend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
     const leads = campaigns.reduce((sum, campaign) => sum + campaign.leads, 0);
@@ -383,21 +418,61 @@ export default function Home() {
     return { spend, leads, cpl: leads ? spend / leads : 0, ctr: impressions ? (clicks / impressions) * 100 : 0 };
   }, [campaigns]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/campaigns");
+        const payload = await response.json() as { campaigns?: CampaignRow[]; error?: string };
+        if (!response.ok || !payload.campaigns) throw new Error(payload.error || "Campagnes konden niet worden geladen.");
+        if (cancelled) return;
+        const mapped = payload.campaigns.map(rowToCampaign);
+        setCampaigns(mapped);
+        setSelectedId(mapped[0]?.id);
+      } catch (error) {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Campagnes konden niet worden geladen.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function addCampaign(campaign: Campaign) {
     setCampaigns((current) => [campaign, ...current]);
     setSelectedId(campaign.id);
   }
 
-  function updateSelected(update: Partial<Campaign>, message: string) {
-    setCampaigns((current) => current.map((campaign) => campaign.id === selected.id ? { ...campaign, ...update } : campaign));
-    toast.success(message);
+  async function persistSelected(fields: Record<string, unknown>) {
+    if (!selected || Object.keys(fields).length === 0) return;
+    try {
+      const response = await fetch(`/api/campaigns/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      const payload = await response.json() as { campaign?: CampaignRow; error?: string };
+      if (!response.ok || !payload.campaign) throw new Error(payload.error || "Wijziging kon niet worden opgeslagen.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Wijziging kon niet worden opgeslagen.");
+    }
   }
 
   function patchSelected(update: Partial<Campaign>) {
+    if (!selected) return;
     setCampaigns((current) => current.map((campaign) => campaign.id === selected.id ? { ...campaign, ...update } : campaign));
   }
 
+  function updateSelected(update: Partial<Campaign>, message: string) {
+    patchSelected(update);
+    toast.success(message);
+    void persistSelected(toApiFields(update));
+  }
+
   async function regenerateBackground() {
+    if (!selected) return;
     setIsGeneratingBackground(true);
     try {
       const response = await fetch("/api/generate-background", {
@@ -412,6 +487,7 @@ export default function Home() {
       const payload = await response.json() as { image?: string; error?: string };
       if (!response.ok || !payload.image) throw new Error(payload.error || "Achtergrond genereren is niet gelukt.");
       patchSelected({ backgroundImage: payload.image });
+      void persistSelected({ backgroundImageUrl: payload.image });
       toast.success("Nieuwe achtergrond gegenereerd");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Achtergrond genereren is niet gelukt.");
@@ -421,6 +497,7 @@ export default function Home() {
   }
 
   async function regenerateCopy() {
+    if (!selected) return;
     setIsGeneratingCopy(true);
     try {
       const response = await fetch("/api/analyze-vacancy", {
@@ -450,6 +527,12 @@ export default function Home() {
         usps: payload.analysis.usps,
         backgroundPrompt: payload.analysis.creative.backgroundPrompt,
       });
+      void persistSelected({
+        primaryText: payload.analysis.copy.primaryText,
+        headline: payload.analysis.copy.headline,
+        description: payload.analysis.copy.description,
+        usps: payload.analysis.usps,
+      });
       toast.success("Nieuwe tekstvariant gegenereerd");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Tekst genereren is niet gelukt.");
@@ -459,6 +542,7 @@ export default function Home() {
   }
 
   async function exportCreative() {
+    if (!selected) return;
     try {
       await downloadCreative(selected, creativeFormat);
       toast.success(`${CREATIVE_DIMENSIONS[creativeFormat].label} gedownload`);
@@ -467,18 +551,50 @@ export default function Home() {
     }
   }
 
-  function replaceLogo(file?: File) {
-    if (!file) return;
+  async function replaceLogo(file?: File) {
+    if (!file || !selected) return;
     if (!file.type.startsWith("image/") || file.size > 2_000_000) {
       toast.error("Gebruik een afbeelding van maximaal 2 MB.");
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      patchSelected({ logoImage: String(reader.result) });
-      toast.success("Logo bijgewerkt");
+    reader.onload = async () => {
+      try {
+        const response = await fetch("/api/upload-logo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl: String(reader.result) }),
+        });
+        const payload = await response.json() as { url?: string; error?: string };
+        if (!response.ok || !payload.url) throw new Error(payload.error || "Logo uploaden is niet gelukt.");
+        patchSelected({ logoImage: payload.url });
+        void persistSelected({ logoImageUrl: payload.url });
+        toast.success("Logo bijgewerkt");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Logo uploaden is niet gelukt.");
+      }
     };
     reader.readAsDataURL(file);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#081722] text-[#91aabb]">
+        <LoaderCircle className="size-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!selected) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#081722] px-6 text-center text-white">
+        <FinderzMark />
+        <h1 className="text-xl font-semibold">Nog geen campagnes</h1>
+        <p className="max-w-sm text-sm text-[#91aabb]">Maak je eerste campagne aan om het dashboard te vullen met echte data.</p>
+        <NewCampaignSheet onCreate={addCampaign} />
+        <Toaster theme="dark" richColors position="bottom-right" />
+      </div>
+    );
   }
 
   const budgetUsed = selected.maxBudget ? Math.min((selected.spend / selected.maxBudget) * 100, 100) : 0;
