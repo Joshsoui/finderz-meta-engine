@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap');
 
 @utility scrollbar-thin {
   scrollbar-width: thin;
@@ -177,23 +178,33 @@ button { cursor: pointer; }
   content: ""; position: absolute; inset: 12% -30% auto 35%; height: 50%; transform: rotate(-18deg);
   border: 1px solid rgba(110,211,236,.18); background: linear-gradient(90deg,transparent,rgba(82,183,212,.12));
 }
-.creative-shade { position: absolute; inset: 0; background: linear-gradient(to top,rgba(1,12,19,.97) 12%,rgba(1,12,19,.45) 62%,rgba(1,12,19,.2)); }
+.creative-top-scrim { position: absolute; inset: 0 0 auto 0; height: 32%; background: linear-gradient(to bottom,rgba(0,10,18,.5),transparent); }
 .creative-content { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; padding: 1.2rem; }
 .creative-logo { display: flex; justify-content: flex-end; }
-.creative-logo-badge { display: flex; align-items: center; border-radius: .6rem; background: rgba(1,12,19,.55); padding: .4rem .6rem; }
-.creative-logo img { display: block; width: auto; max-width: 42%; height: auto; max-height: 3rem; object-fit: contain; }
-.creative-location {
-  display: inline-flex; margin-bottom: .55rem; border-radius: 999px; background: rgba(84,188,216,.16);
-  padding: .28rem .55rem; color: #92d8eb; font-size: .65rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase;
+.creative-logo-badge { display: flex; max-width: 42%; align-items: center; border-radius: .6rem; background: rgba(1,12,19,.4); padding: .4rem .6rem; }
+.creative-logo-badge img { display: block; width: auto; height: auto; max-width: 100%; max-height: 2.4rem; object-fit: contain; }
+.creative-headline {
+  margin-top: .7rem; max-width: 90%; color: white; font-family: "Baloo 2", Arial, sans-serif;
+  font-size: clamp(1.3rem,4.2vw,1.9rem); font-weight: 800; line-height: 1.08; letter-spacing: -.01em;
+  text-shadow: 0 2px 10px rgba(0,8,14,.4);
 }
-.creative-content h3 { max-width: 16rem; color: white; font-size: clamp(1.45rem,3vw,2.1rem); font-weight: 800; line-height: 1.04; letter-spacing: -.04em; }
-.creative-usps { display: flex; flex-direction: column; gap: .3rem; margin-top: .8rem; }
-.creative-usps span { display: flex; width: fit-content; min-width: 72%; align-items: center; gap: .4rem; margin-left: -1.2rem; background: rgba(0,48,73,.76); padding: .35rem .7rem .35rem 1.2rem; color: #f4f8fa; font-size: .7rem; font-weight: 650; }
-.creative-usps span:first-child { background: rgba(0,97,146,.84); }
-.creative-usps svg { color: #5cc8e8; }
-.creative-cta {
-  display: inline-flex; width: calc(100% + 2.4rem); align-items: center; justify-content: space-between; gap: .3rem; margin: .9rem -1.2rem -1.2rem;
-  background: #006192; padding: .65rem 1.2rem; color: white; font-size: .7rem; font-weight: 800; text-transform: uppercase;
+.creative-bottom { margin-top: auto; }
+.creative-title-banner { margin: 0 -1.2rem; background: #0d6fa3; padding: .85rem 1.2rem; }
+.creative-title-banner-job { font-family: "Baloo 2", Arial, sans-serif; color: white; font-size: clamp(1rem,3vw,1.3rem); font-weight: 800; line-height: 1.15; }
+.creative-title-banner-location { margin-top: .2rem; color: rgba(255,255,255,.92); font-family: "Baloo 2", Arial, sans-serif; font-size: .78rem; font-weight: 600; }
+.creative-usp-panel {
+  align-self: flex-end; width: 62%; margin-top: .7rem; border-radius: .6rem; background: rgba(60,94,104,.55);
+  padding: .7rem .75rem; display: flex; flex-direction: column; gap: .5rem;
+}
+.creative-usp-row { display: flex; align-items: flex-start; gap: .5rem; }
+.creative-usp-icon {
+  display: flex; flex: none; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem;
+  margin-top: .05rem; border-radius: 999px; background: rgba(255,255,255,.18); color: white;
+}
+.creative-usp-row span:last-child { color: white; font-family: "Baloo 2", Arial, sans-serif; font-size: .72rem; font-weight: 700; line-height: 1.25; }
+.creative-cta-pill {
+  align-self: center; margin-top: .9rem; border-radius: 999px; background: #0a3d5c;
+  padding: .55rem 1.3rem; color: white; font-family: "Baloo 2", Arial, sans-serif; font-size: .72rem; font-weight: 800; letter-spacing: .03em;
 }
 .content-label { display: block; margin-bottom: .5rem; color: #698597; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .content-box { border: 1px solid rgba(255,255,255,.08); border-radius: .75rem; background: rgba(255,255,255,.025); padding: .9rem; color: #c3d1d9; font-size: .85rem; line-height: 1.65; }

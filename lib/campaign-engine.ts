@@ -61,7 +61,7 @@ export function generateCampaign(input: VacancyInput) {
         "? " +
         sentence(input.description).slice(0, 220) +
         " Laat eenvoudig je gegevens achter; we nemen vrijblijvend contact met je op.",
-      headline: input.title.trim() + " | " + input.location.trim(),
+      headline: "Toe aan een nieuwe stap als " + input.title.trim() + " in " + input.location.trim() + "?",
       description: salary + " · Bekijk de vacature",
     },
     usps,

@@ -79,7 +79,7 @@ test("generateCampaign falls back to a generic salary line when none is given", 
 test("generateCampaign trims whitespace in title and location throughout the output", () => {
   const result = generateCampaign({ ...baseVacancy, title: "  Monteur  ", location: "  Almere  " });
   assert.equal(result.audience.region, "Almere");
-  assert.equal(result.copy.headline, "Monteur | Almere");
+  assert.equal(result.copy.headline, "Toe aan een nieuwe stap als Monteur in Almere?");
   assert.match(result.creative.backgroundPrompt, /monteur/);
   assert.match(result.creative.backgroundPrompt, /Almere/);
   assert.equal(result.creative.overlay.title, "Monteur");

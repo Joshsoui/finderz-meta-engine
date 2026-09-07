@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit, Check,
+  Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit,
   CheckCircle2, ChevronRight, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
   Megaphone, MousePointerClick, Pause, Play,
   RefreshCw, Search, ShieldCheck, Sparkles, Target, Upload,
@@ -42,20 +42,28 @@ function CreativePreview({ campaign, format }: { campaign: Campaign; format: Cre
         className={"creative-bg" + (campaign.backgroundImage ? "" : " creative-bg-fallback")}
         style={campaign.backgroundImage ? { backgroundImage: `url(${campaign.backgroundImage})` } : undefined}
       />
-      <div className="creative-shade" />
+      <div className="creative-top-scrim" />
       <div className="creative-content">
         <div className="creative-logo">
           <div className="creative-logo-badge">
             {campaign.logoImage ? <img src={campaign.logoImage} alt="Finderz Keeperz" /> : <FinderzMark />}
           </div>
         </div>
-        <div className="mt-auto">
-          <div className="creative-location">{campaign.location}</div>
-          <h3>{campaign.title}</h3>
-          <div className="creative-usps">
-            {campaign.usps.map((usp) => <span key={usp}><Check className="size-3.5" />{usp}</span>)}
+        <h3 className="creative-headline">{campaign.headline}</h3>
+        <div className="creative-bottom">
+          <div className="creative-title-banner">
+            <div className="creative-title-banner-job">{campaign.title}</div>
+            <div className="creative-title-banner-location">{campaign.location}</div>
           </div>
-          <div className="creative-cta">Solliciteer nu<ChevronRight className="size-4" /></div>
+          <div className="creative-usp-panel">
+            {campaign.usps.map((usp) => (
+              <div className="creative-usp-row" key={usp}>
+                <span className="creative-usp-icon"><ChevronRight className="size-3" /></span>
+                <span>{usp}</span>
+              </div>
+            ))}
+          </div>
+          <div className="creative-cta-pill">SOLLICITEER NU</div>
         </div>
       </div>
     </div>

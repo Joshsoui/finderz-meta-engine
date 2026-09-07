@@ -7,12 +7,31 @@ export const CREATIVE_DIMENSIONS: Record<CreativeFormat, { width: number; height
 };
 
 export type CreativeData = {
+  /** Short, punchy hook question shown at the top of the ad (e.g. "Toe aan een nieuwe uitdaging?"). */
+  headline: string;
   title: string;
   location: string;
   usps: [string, string, string];
   backgroundImage?: string;
   logoImage?: string;
 };
+
+const HEADLINE_FONT = '"Baloo 2", Arial, sans-serif';
+const CTA_TEXT = "SOLLICITEER NU";
+
+async function ensureFontsLoaded() {
+  if (typeof document === "undefined" || !("fonts" in document)) return;
+  try {
+    await Promise.all([
+      document.fonts.load(`800 48px ${HEADLINE_FONT}`),
+      document.fonts.load(`700 32px ${HEADLINE_FONT}`),
+      document.fonts.load(`600 24px ${HEADLINE_FONT}`),
+    ]);
+    await document.fonts.ready;
+  } catch {
+    // Baloo 2 could not be loaded; canvas text falls back to Arial.
+  }
+}
 
 function loadImage(source: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -69,29 +88,175 @@ function drawFallbackBackground(context: CanvasRenderingContext2D, width: number
   context.fillRect(0, 0, width, height);
 }
 
-async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, width: number, height: number) {
-  const pad = Math.round(width * 0.055);
+async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, width: number, base: number) {
+  const pad = Math.round(width * 0.05);
   const source = data.logoImage || "/finderzkeeperz-logo.png";
   try {
     const logo = await loadImage(source);
     const maxWidth = width * 0.24;
-    const maxHeight = height * 0.075;
+    const maxHeight = base * 0.045;
     const scale = Math.min(maxWidth / logo.naturalWidth, maxHeight / logo.naturalHeight);
     const drawWidth = logo.naturalWidth * scale;
     const drawHeight = logo.naturalHeight * scale;
-    const badgePad = Math.round(pad * 0.4);
+    const badgePad = Math.round(base * 0.016);
     const badgeX = width - pad - drawWidth - badgePad;
     const badgeY = pad - badgePad;
 
-    // A dark badge behind the logo keeps it legible against any background photo.
-    context.fillStyle = "rgba(1,12,19,0.55)";
+    context.fillStyle = "rgba(1,12,19,0.4)";
     roundRect(context, badgeX, badgeY, drawWidth + badgePad * 2, drawHeight + badgePad * 2, badgePad);
     context.fill();
 
     context.drawImage(logo, width - pad - drawWidth, pad, drawWidth, drawHeight);
+    return pad + drawHeight + badgePad;
   } catch {
-    // No logo could be loaded; leave the corner empty rather than fail the export.
+    return pad;
   }
+}
+
+// --- Title banner (full-width blue band with job title + location) ---
+
+type BannerMetrics = { height: number; titleSize: number; locationSize: number; vPad: number; gap: number };
+
+function measureBanner(width: number, pad: number, base: number): BannerMetrics {
+  const titleSize = Math.round(Math.max(24, base * 0.048));
+  const locationSize = Math.round(Math.max(16, base * 0.027));
+  const vPad = Math.round(base * 0.028);
+  const gap = Math.round(base * 0.01);
+  return { height: vPad * 2 + titleSize + gap + locationSize, titleSize, locationSize, vPad, gap };
+}
+
+function drawBannerAt(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, metrics: BannerMetrics, top: number) {
+  context.fillStyle = "#0d6fa3";
+  context.fillRect(0, top, width, metrics.height);
+
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.fillStyle = "#ffffff";
+  context.font = `800 ${metrics.titleSize}px ${HEADLINE_FONT}`;
+  context.fillText(data.title, pad, top + metrics.vPad, width - pad * 2);
+
+  context.font = `600 ${metrics.locationSize}px ${HEADLINE_FONT}`;
+  context.fillText(data.location, pad, top + metrics.vPad + metrics.titleSize + metrics.gap, width - pad * 2);
+}
+
+// --- USP glass panel (triangle-badge list) ---
+
+type UspPanelMetrics = {
+  panelX: number; panelWidth: number; panelHeight: number; innerPad: number;
+  iconSize: number; uspFontSize: number; uspLineHeight: number; rowGap: number;
+  wrappedUsps: string[][]; rowHeights: number[];
+};
+
+function measureUspPanel(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number): UspPanelMetrics {
+  const panelWidth = Math.round(width * 0.58);
+  const panelX = width - pad - panelWidth;
+  const iconSize = Math.round(base * 0.044);
+  const uspFontSize = Math.round(Math.max(15, base * 0.023));
+  const uspLineHeight = Math.round(uspFontSize * 1.2);
+  const rowGap = Math.round(base * 0.018);
+  const innerPad = Math.round(base * 0.022);
+  const textWidth = panelWidth - innerPad * 2 - iconSize - Math.round(base * 0.018);
+
+  context.font = `700 ${uspFontSize}px ${HEADLINE_FONT}`;
+  const wrappedUsps = data.usps.map((usp) => wrapLines(context, usp, textWidth, 2));
+  const rowHeights = wrappedUsps.map((lines) => Math.max(iconSize, lines.length * uspLineHeight));
+  const panelHeight = innerPad * 2 + rowHeights.reduce((sum, h) => sum + h, 0) + rowGap * (rowHeights.length - 1);
+
+  return { panelX, panelWidth, panelHeight, innerPad, iconSize, uspFontSize, uspLineHeight, rowGap, wrappedUsps, rowHeights };
+}
+
+function drawTriangleBadge(context: CanvasRenderingContext2D, x: number, y: number, size: number) {
+  context.fillStyle = "rgba(255,255,255,0.16)";
+  context.beginPath();
+  context.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = "#ffffff";
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  const triangleSize = size * 0.32;
+  context.beginPath();
+  context.moveTo(cx - triangleSize * 0.4, cy - triangleSize);
+  context.lineTo(cx - triangleSize * 0.4, cy + triangleSize);
+  context.lineTo(cx + triangleSize * 0.7, cy);
+  context.closePath();
+  context.fill();
+}
+
+function drawUspPanelAt(context: CanvasRenderingContext2D, metrics: UspPanelMetrics, top: number) {
+  context.fillStyle = "rgba(60,94,104,0.55)";
+  roundRect(context, metrics.panelX, top, metrics.panelWidth, metrics.panelHeight, Math.round(metrics.innerPad * 0.8));
+  context.fill();
+
+  let rowY = top + metrics.innerPad;
+  context.textAlign = "left";
+  context.fillStyle = "#ffffff";
+  metrics.wrappedUsps.forEach((lines, index) => {
+    drawTriangleBadge(context, metrics.panelX + metrics.innerPad, rowY, metrics.iconSize);
+    context.font = `700 ${metrics.uspFontSize}px ${HEADLINE_FONT}`;
+    context.textBaseline = "top";
+    const textX = metrics.panelX + metrics.innerPad + metrics.iconSize + Math.round(metrics.innerPad * 0.6);
+    const rowHeight = metrics.rowHeights[index];
+    const textStartY = rowY + (rowHeight - lines.length * metrics.uspLineHeight) / 2;
+    const textWidth = metrics.panelWidth - metrics.innerPad * 2 - metrics.iconSize - Math.round(metrics.innerPad * 0.6);
+    lines.forEach((line, lineIndex) => context.fillText(line, textX, textStartY + lineIndex * metrics.uspLineHeight, textWidth));
+    rowY += rowHeight + metrics.rowGap;
+  });
+}
+
+// --- CTA pill ---
+
+type CtaMetrics = { width: number; height: number; fontSize: number };
+
+function measureCta(context: CanvasRenderingContext2D, base: number): CtaMetrics {
+  const fontSize = Math.round(Math.max(16, base * 0.026));
+  context.font = `800 ${fontSize}px ${HEADLINE_FONT}`;
+  const textWidth = context.measureText(CTA_TEXT).width;
+  const hPad = Math.round(base * 0.045);
+  const vPad = Math.round(base * 0.02);
+  return { width: textWidth + hPad * 2, height: fontSize + vPad * 2, fontSize };
+}
+
+function drawCtaAt(context: CanvasRenderingContext2D, width: number, metrics: CtaMetrics, top: number) {
+  const pillX = (width - metrics.width) / 2;
+
+  context.fillStyle = "#0a3d5c";
+  roundRect(context, pillX, top, metrics.width, metrics.height, metrics.height / 2);
+  context.fill();
+
+  context.font = `800 ${metrics.fontSize}px ${HEADLINE_FONT}`;
+  context.fillStyle = "#ffffff";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(CTA_TEXT, width / 2, top + metrics.height / 2 + 1);
+}
+
+// --- Headline hook ---
+
+function drawHeadline(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number, top: number, maxBottom: number) {
+  let fontSize = Math.round(Math.max(26, base * 0.052));
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  const maxWidth = width - pad * 2;
+
+  let lines: string[];
+  let lineHeight: number;
+  // Shrink the headline until two lines fit in the space above the bottom cluster.
+  do {
+    context.font = `800 ${fontSize}px ${HEADLINE_FONT}`;
+    lines = wrapLines(context, data.headline, maxWidth, 2);
+    lineHeight = Math.round(fontSize * 1.1);
+    fontSize -= 2;
+  } while (top + lines.length * lineHeight > maxBottom && fontSize > 18);
+
+  context.shadowColor = "rgba(0,8,14,0.4)";
+  context.shadowBlur = Math.round(lineHeight * 0.3);
+  context.shadowOffsetY = 2;
+  context.fillStyle = "#ffffff";
+  lines.forEach((line, index) => context.fillText(line, pad, top + index * lineHeight));
+  context.shadowColor = "transparent";
+  context.shadowBlur = 0;
+  context.shadowOffsetY = 0;
 }
 
 export async function renderCreative(data: CreativeData, format: CreativeFormat) {
@@ -101,6 +266,8 @@ export async function renderCreative(data: CreativeData, format: CreativeFormat)
   canvas.height = height;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas wordt niet ondersteund");
+
+  await ensureFontsLoaded();
 
   if (data.backgroundImage) {
     try {
@@ -112,77 +279,34 @@ export async function renderCreative(data: CreativeData, format: CreativeFormat)
     drawFallbackBackground(context, width, height);
   }
 
-  const shade = context.createLinearGradient(0, 0, 0, height);
-  shade.addColorStop(0, "rgba(0,30,46,0.10)");
-  shade.addColorStop(0.45, "rgba(0,30,46,0.30)");
-  shade.addColorStop(1, "rgba(0,18,29,0.94)");
-  context.fillStyle = shade;
-  context.fillRect(0, 0, width, height);
-
-  const sideShade = context.createLinearGradient(0, 0, width * 0.75, 0);
-  sideShade.addColorStop(0, "rgba(0,48,73,0.56)");
-  sideShade.addColorStop(1, "rgba(0,48,73,0)");
-  context.fillStyle = sideShade;
-  context.fillRect(0, 0, width, height);
-
-  await drawLogo(context, data, width, height);
+  const topScrim = context.createLinearGradient(0, 0, 0, height * 0.32);
+  topScrim.addColorStop(0, "rgba(0,10,18,0.5)");
+  topScrim.addColorStop(1, "rgba(0,10,18,0)");
+  context.fillStyle = topScrim;
+  context.fillRect(0, 0, width, height * 0.32);
 
   const base = Math.min(width, height);
   const pad = Math.round(width * 0.055);
-  const ctaHeight = Math.round(Math.max(72, height * 0.095));
-  const uspHeight = Math.round(Math.max(49, base * 0.066));
-  const uspGap = Math.round(base * 0.012);
-  const titleSize = Math.round(Math.max(42, base * (format === "1.91:1" ? 0.078 : 0.068)));
-  const locationSize = Math.round(Math.max(20, base * 0.026));
-  const titleLineHeight = Math.round(titleSize * 1.02);
-  const titleLines = 2;
-  const contentHeight = 34 + titleLineHeight * titleLines + 22 + (uspHeight * 3 + uspGap * 2);
-  const contentTop = Math.max(height * 0.36, height - ctaHeight - pad * 0.7 - contentHeight);
+  const gap = Math.round(base * 0.022);
+  const bottomMargin = Math.round(base * 0.045);
 
-  context.textAlign = "left";
-  context.textBaseline = "middle";
-  context.font = `800 ${locationSize}px Arial, sans-serif`;
-  const location = data.location.toUpperCase();
-  const locationWidth = context.measureText(location).width + locationSize * 1.5;
-  context.fillStyle = "rgba(0,97,146,0.78)";
-  roundRect(context, pad, contentTop, locationWidth, locationSize * 1.75, locationSize * 0.6);
-  context.fill();
-  context.fillStyle = "#ffffff";
-  context.fillText(location, pad + locationSize * 0.72, contentTop + locationSize * 0.9);
+  // Measure the bottom cluster (CTA, USP panel, banner) first, then stack it
+  // upward from the bottom edge so it always fits regardless of aspect ratio.
+  const ctaMetrics = measureCta(context, base);
+  const panelMetrics = measureUspPanel(context, data, width, pad, base);
+  const bannerMetrics = measureBanner(width, pad, base);
 
-  context.font = `900 ${titleSize}px Arial, sans-serif`;
-  context.textBaseline = "top";
-  const lines = wrapLines(context, data.title, width - pad * 2, titleLines);
-  const titleY = contentTop + locationSize * 2.15;
-  lines.forEach((line, index) => context.fillText(line, pad, titleY + index * titleLineHeight));
+  const ctaTop = height - bottomMargin - ctaMetrics.height;
+  const panelTop = ctaTop - gap - panelMetrics.panelHeight;
+  const bannerTop = panelTop - gap - bannerMetrics.height;
 
-  let uspY = titleY + titleLineHeight * titleLines + base * 0.02;
-  context.font = `700 ${Math.round(Math.max(19, base * 0.025))}px Arial, sans-serif`;
-  context.textBaseline = "middle";
-  data.usps.forEach((usp, index) => {
-    const textWidth = Math.min(context.measureText(usp).width + uspHeight * 1.45, width * 0.82);
-    const barWidth = Math.max(width * (0.54 + index * 0.055), textWidth);
-    context.fillStyle = index === 0 ? "rgba(0,97,146,0.84)" : "rgba(0,48,73,0.76)";
-    context.fillRect(0, uspY, barWidth, uspHeight);
-    context.fillStyle = "#66c7df";
-    context.beginPath();
-    context.arc(pad, uspY + uspHeight / 2, uspHeight * 0.14, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "#ffffff";
-    context.fillText(usp, pad + uspHeight * 0.34, uspY + uspHeight / 2 + 1, barWidth - pad - uspHeight * 0.5);
-    uspY += uspHeight + uspGap;
-  });
+  const logoBottom = await drawLogo(context, data, width, base);
+  const headlineTop = Math.max(Math.round(height * 0.075), logoBottom + Math.round(base * 0.015));
+  drawHeadline(context, data, width, pad, base, headlineTop, bannerTop - gap);
 
-  const ctaY = height - ctaHeight;
-  context.fillStyle = "#006192";
-  context.fillRect(0, ctaY, width, ctaHeight);
-  context.fillStyle = "#ffffff";
-  context.font = `900 ${Math.round(Math.max(24, base * 0.035))}px Arial, sans-serif`;
-  context.textBaseline = "middle";
-  context.fillText("SOLLICITEER NU", pad, ctaY + ctaHeight / 2);
-  context.textAlign = "right";
-  context.font = `700 ${Math.round(Math.max(18, base * 0.024))}px Arial, sans-serif`;
-  context.fillText("FINDERZ KEEPERZ  →", width - pad, ctaY + ctaHeight / 2);
+  drawBannerAt(context, data, width, pad, bannerMetrics, bannerTop);
+  drawUspPanelAt(context, panelMetrics, panelTop);
+  drawCtaAt(context, width, ctaMetrics, ctaTop);
 
   return canvas.toDataURL("image/png");
 }
