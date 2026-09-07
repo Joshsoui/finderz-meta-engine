@@ -1,5 +1,6 @@
 /** Cloudflare Worker entry point. */
 import handler from "vinext/server/app-router-entry";
+import { refreshPipeline } from "@/lib/pipeline-sync";
 
 interface Env {
   ASSETS: Fetcher;
@@ -21,6 +22,10 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+
+  async scheduled(_event: ScheduledController, _env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(refreshPipeline().catch(() => {}));
   },
 };
 

@@ -15,6 +15,13 @@
       "when": 1788787148155,
       "tag": "0001_elite_malice",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788792720999,
+      "tag": "0002_uneven_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }

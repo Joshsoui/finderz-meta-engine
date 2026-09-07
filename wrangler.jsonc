@@ -23,5 +23,8 @@
       "binding": "MEDIA",
       "bucket_name": "finderz-meta-engine-media"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 */6 * * *"]
+  }
 }

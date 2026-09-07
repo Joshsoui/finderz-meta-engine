@@ -43,6 +43,26 @@ export const metricSnapshots = sqliteTable(
   (table) => [index("idx_metrics_campaign_recorded").on(table.campaignId, table.recordedAt)]
 );
 
+export const pipelineVacancies = sqliteTable(
+  "pipeline_vacancies",
+  {
+    id: text("id").primaryKey(),
+    source: text("source", { enum: ["finderzkeeperz", "captainrecruit", "manual"] }).notNull(),
+    sourceUrl: text("source_url"),
+    title: text("title").notNull(),
+    location: text("location").notNull().default(""),
+    employmentType: text("employment_type").notNull().default(""),
+    salary: text("salary").notNull().default(""),
+    description: text("description").notNull().default(""),
+    feeCents: integer("fee_cents"),
+    status: text("status", { enum: ["new", "campaign_created", "dismissed"] }).notNull().default("new"),
+    campaignId: text("campaign_id").references(() => campaigns.id),
+    firstSeenAt: text("first_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_pipeline_status_updated").on(table.status, table.updatedAt)]
+);
+
 export const optimizationActions = sqliteTable(
   "optimization_actions",
   {
