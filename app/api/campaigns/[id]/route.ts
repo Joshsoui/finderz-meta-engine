@@ -16,7 +16,7 @@ type UpdateCampaignInput = {
   usps?: [string, string, string];
   backgroundImageUrl?: string;
   logoImageUrl?: string;
-  finalCreativeImageUrl?: string;
+  finalCreativeImagesJson?: string;
   qualityLeads?: number;
   metaCampaignId?: string;
 };
@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.usps && input.usps.length === 3) update.uspsJson = JSON.stringify(input.usps);
     if (input.backgroundImageUrl) update.backgroundImageUrl = input.backgroundImageUrl;
     if (input.logoImageUrl) update.logoImageUrl = input.logoImageUrl;
-    if (input.finalCreativeImageUrl) update.finalCreativeImageUrl = input.finalCreativeImageUrl;
+    if (input.finalCreativeImagesJson) update.finalCreativeImagesJson = input.finalCreativeImagesJson;
     if (Number.isFinite(input.qualityLeads)) update.qualityLeads = Math.max(0, Math.round(input.qualityLeads!));
     if (input.metaCampaignId) update.metaCampaignId = input.metaCampaignId;
 
@@ -53,14 +53,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // paused, per lib/meta-client.ts's safety default) and store its id so
       // insights polling and later pause/budget changes can reach it. Meta
       // gets the fully branded creative (logo, title banner, USPs, CTA baked
-      // in by the client via lib/creative-renderer.ts and uploaded just
-      // before this request), never the bare AI background photo -- that
-      // upload is required here rather than falling back silently.
-      const finalCreativeImageUrl = update.finalCreativeImageUrl ?? existing.finalCreativeImageUrl;
-      if (!finalCreativeImageUrl) {
-        return Response.json({ error: "Genereer eerst de advertentie-creative voordat je live gaat" }, { status: 400 });
+      // in by the client via lib/creative-renderer.ts) in all 3 placement
+      // shapes, uploaded just before this request -- never the bare AI
+      // background photo, and never just one crop stretched across every
+      // placement.
+      const imagesJson = update.finalCreativeImagesJson ?? existing.finalCreativeImagesJson;
+      const images = imagesJson ? (JSON.parse(imagesJson) as Partial<Record<"1:1" | "1.91:1" | "9:16", string>>) : null;
+      if (!images?.["1:1"] || !images["1.91:1"] || !images["9:16"]) {
+        return Response.json({ error: "Genereer eerst de advertentie-creative (alle 3 formaten) voordat je live gaat" }, { status: 400 });
       }
       const origin = new URL(request.url).origin;
+      const toAbsolute = (url: string) => (url.startsWith("http") ? url : `${origin}${url}`);
       const { metaCampaignId, metaLeadFormId } = await createMetaCampaign({
         title: existing.title,
         location: existing.location,
@@ -68,7 +71,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         primaryText: update.primaryText ?? existing.primaryText,
         headline: update.headline ?? existing.headline,
         description: update.descriptionText ?? existing.descriptionText,
-        imageUrl: finalCreativeImageUrl.startsWith("http") ? finalCreativeImageUrl : `${origin}${finalCreativeImageUrl}`,
+        imageUrls: { square: toAbsolute(images["1:1"]), landscape: toAbsolute(images["1.91:1"]), story: toAbsolute(images["9:16"]) },
       });
       update.metaCampaignId = metaCampaignId;
       update.metaLeadFormId = metaLeadFormId;

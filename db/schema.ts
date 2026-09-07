@@ -21,7 +21,8 @@ export const campaigns = sqliteTable(
     creativePrompt: text("creative_prompt").notNull(),
     backgroundImageUrl: text("background_image_url"),
     logoImageUrl: text("logo_image_url"),
-    finalCreativeImageUrl: text("final_creative_image_url"),
+    /** JSON: { "1:1": url, "1.91:1": url, "9:16": url } -- the branded creative baked and uploaded per placement shape when the campaign first goes live. */
+    finalCreativeImagesJson: text("final_creative_images_json"),
     qualityLeads: integer("quality_leads").notNull().default(0),
     metaCampaignId: text("meta_campaign_id"),
     metaLeadFormId: text("meta_lead_form_id"),

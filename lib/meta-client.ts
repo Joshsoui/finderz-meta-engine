@@ -116,8 +116,8 @@ export type CreateMetaCampaignInput = {
   primaryText: string;
   headline: string;
   description: string;
-  /** Publicly reachable URL of the ad's background image (this worker serves it under /media/...). */
-  imageUrl: string;
+  /** Publicly reachable URLs of the branded creative in each placement shape (this worker serves them under /media/...). */
+  imageUrls: { square: string; landscape: string; story: string };
 };
 
 /**
@@ -169,8 +169,17 @@ export async function createMetaCampaign(input: CreateMetaCampaignInput): Promis
     },
   });
 
-  const image = await uploadAdImage(credentials, input.imageUrl);
+  const [squareImage, landscapeImage, storyImage] = await Promise.all([
+    uploadAdImage(credentials, input.imageUrls.square),
+    uploadAdImage(credentials, input.imageUrls.landscape),
+    uploadAdImage(credentials, input.imageUrls.story),
+  ]);
 
+  // asset_feed_spec + asset_customization_rules is Meta's documented way to
+  // serve a different image per placement shape from one ad: the square
+  // crop is the default (also set as the object_story_spec base image, for
+  // any placement the rules below don't cover), the landscape crop goes to
+  // Feed-shaped placements, and the vertical crop goes to Stories/Reels.
   const creative = await metaRequest<{ id: string }>(`/act_${credentials.adAccountId}/adcreatives`, credentials.accessToken, {
     method: "POST",
     params: {
@@ -181,10 +190,36 @@ export async function createMetaCampaign(input: CreateMetaCampaignInput): Promis
           message: input.primaryText,
           name: input.headline,
           description: input.description,
-          image_hash: image.hash,
+          image_hash: squareImage.hash,
           link: `https://www.facebook.com/${credentials.pageId}`,
           call_to_action: { type: "APPLY_NOW", value: { lead_gen_form_id: leadFormId } },
         },
+      }),
+      asset_feed_spec: JSON.stringify({
+        images: [
+          { hash: squareImage.hash, adlabels: [{ name: "square" }] },
+          { hash: landscapeImage.hash, adlabels: [{ name: "landscape" }] },
+          { hash: storyImage.hash, adlabels: [{ name: "story" }] },
+        ],
+        ad_formats: ["SINGLE_IMAGE"],
+        asset_customization_rules: [
+          {
+            customization_spec: {
+              publisher_platforms: ["facebook", "instagram"],
+              facebook_positions: ["story", "facebook_reels"],
+              instagram_positions: ["story", "reels"],
+            },
+            image_label: { name: "story" },
+          },
+          {
+            customization_spec: {
+              publisher_platforms: ["facebook", "instagram"],
+              facebook_positions: ["feed", "video_feeds", "marketplace", "right_hand_column", "search", "instream_banner"],
+              instagram_positions: ["stream", "explore", "explore_home"],
+            },
+            image_label: { name: "landscape" },
+          },
+        ],
       }),
     },
   });

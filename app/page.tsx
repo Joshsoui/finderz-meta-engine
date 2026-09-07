@@ -178,7 +178,6 @@ function toApiFields(update: Partial<Campaign>): Record<string, unknown> {
   if (update.usps !== undefined) fields.usps = update.usps;
   if (update.backgroundImage !== undefined) fields.backgroundImageUrl = update.backgroundImage;
   if (update.logoImage !== undefined) fields.logoImageUrl = update.logoImage;
-  if (update.finalCreativeImage !== undefined) fields.finalCreativeImageUrl = update.finalCreativeImage;
   return fields;
 }
 
@@ -338,23 +337,28 @@ export default function Home() {
     if (!selected) return;
     setIsPublishing(true);
     try {
-      // Meta needs the fully branded image (logo, title banner, USPs, CTA),
-      // never the bare AI background photo -- bake it once here, right as
-      // the campaign goes live, and store the result so it doesn't need to
-      // be redone on every subsequent status change.
-      const dataUrl = await renderCreative(selected, "1:1");
-      const uploadResponse = await fetch("/api/upload-creative", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl }),
-      });
-      const uploadPayload = await uploadResponse.json() as { url?: string; error?: string };
-      if (!uploadResponse.ok || !uploadPayload.url) throw new Error(uploadPayload.error || "Advertentie-creative kon niet worden geüpload.");
+      // Meta needs the fully branded creative (logo, title banner, USPs,
+      // CTA) in every placement shape -- Feed (1.91:1), square (1:1) and
+      // Stories/Reels (9:16) -- never the bare AI background photo stretched
+      // across all of them. Bake and upload all 3 once here, right as the
+      // campaign goes live.
+      const formats: CreativeFormat[] = ["1:1", "1.91:1", "9:16"];
+      const images: Partial<Record<CreativeFormat, string>> = {};
+      for (const format of formats) {
+        const dataUrl = await renderCreative(selected, format);
+        const uploadResponse = await fetch("/api/upload-creative", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl }),
+        });
+        const uploadPayload = await uploadResponse.json() as { url?: string; error?: string };
+        if (!uploadResponse.ok || !uploadPayload.url) throw new Error(uploadPayload.error || `Creative (${format}) kon niet worden geüpload.`);
+        images[format] = uploadPayload.url;
+      }
 
-      updateSelected(
-        { status: "live", finalCreativeImage: uploadPayload.url, recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." },
-        "Campagne gestart",
-      );
+      patchSelected({ status: "live", recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." });
+      await persistSelected({ status: "live", finalCreativeImagesJson: JSON.stringify(images) });
+      toast.success("Campagne gestart");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Campagne kon niet live gezet worden.");
     } finally {
