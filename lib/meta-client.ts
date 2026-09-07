@@ -85,7 +85,7 @@ async function resolveGeoTargeting(accessToken: string, location: string) {
   return { countries: ["NL"] };
 }
 
-async function createLeadForm(credentials: MetaCredentials, title: string): Promise<string> {
+async function createLeadForm(credentials: MetaCredentials, title: string, otysVacancyId?: string): Promise<string> {
   const result = await metaRequest<{ id: string }>(`/${credentials.pageId}/leadgen_forms`, credentials.accessToken, {
     method: "POST",
     params: {
@@ -93,6 +93,11 @@ async function createLeadForm(credentials: MetaCredentials, title: string): Prom
       questions: JSON.stringify([{ type: "FULL_NAME" }, { type: "EMAIL" }, { type: "PHONE" }]),
       privacy_policy: JSON.stringify({ url: "https://finderzkeeperz.nl/privacy", link_text: "Privacybeleid" }),
       locale: "nl_NL",
+      // Invisible to the applicant, but returned with every lead fetched via
+      // the API -- this is how OTYS matches an incoming lead back to the
+      // right vacancy (mirrors the "Vacancy ID" tracking parameter that was
+      // previously typed by hand into Meta's own form editor).
+      ...(otysVacancyId ? { tracking_parameters: JSON.stringify({ vacancy_id: otysVacancyId }) } : {}),
     },
   });
   return result.id;
@@ -118,6 +123,8 @@ export type CreateMetaCampaignInput = {
   description: string;
   /** Publicly reachable URLs of the branded creative in each placement shape (this worker serves them under /media/...). */
   imageUrls: { square: string; landscape: string; story: string };
+  /** OTYS vacancy identifier; passed to Meta as the lead form's "vacancy_id" tracking parameter when set. */
+  otysVacancyId?: string;
 };
 
 /**
@@ -136,7 +143,7 @@ export async function createMetaCampaign(input: CreateMetaCampaignInput): Promis
   const credentials = getMetaCredentials();
   if (!credentials) throw new Error("Meta is not configured (missing META_ACCESS_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID)");
 
-  const leadFormId = await createLeadForm(credentials, input.title);
+  const leadFormId = await createLeadForm(credentials, input.title, input.otysVacancyId);
 
   const campaign = await metaRequest<{ id: string }>(`/act_${credentials.adAccountId}/campaigns`, credentials.accessToken, {
     method: "POST",

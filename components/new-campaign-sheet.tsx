@@ -38,6 +38,7 @@ export function NewCampaignSheet({
   const [description, setDescription] = useState(
     initialValues?.description ?? "Werk zelfstandig op locatie, los technische storingen op en onderhoud installaties. Mbo 2 elektrotechniek, rijbewijs B en klantgerichte instelling."
   );
+  const [otysVacancyId, setOtysVacancyId] = useState("");
   const [logoImage, setLogoImage] = useState<string>();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -126,6 +127,7 @@ export function NewCampaignSheet({
           backgroundPrompt: analysis.creative.backgroundPrompt,
           backgroundImageUrl: backgroundImage,
           logoImageUrl: logoImage,
+          otysVacancyId: otysVacancyId.trim() || undefined,
         }),
       });
       const createPayload = await createResponse.json() as { campaign?: CampaignRow; error?: string };
@@ -190,6 +192,9 @@ export function NewCampaignSheet({
           </div>
           <label className="field-label">Vacatureomschrijving
             <textarea className="field-input min-h-32 resize-none leading-6" value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+          <label className="field-label">OTYS vacature-ID <span className="font-normal text-[#607b8d]">optioneel · voor leadmatching</span>
+            <input className="field-input" placeholder="Plak hier de vacature-code uit OTYS" value={otysVacancyId} onChange={(event) => setOtysVacancyId(event.target.value)} />
           </label>
           <label className="field-label">Finderz Keeperz-logo <span className="font-normal text-[#607b8d]">optioneel · PNG, JPG, WebP of SVG</span>
             <span className="logo-upload">

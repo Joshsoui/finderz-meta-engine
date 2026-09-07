@@ -574,6 +574,7 @@ export default function Home() {
                           usps[index] = event.target.value;
                           patchSelected({ usps });
                         }} onBlur={() => void persistSelected({ usps: selected.usps })} />)}</div></div>
+                        <label><span className="content-label">OTYS vacature-ID <span className="font-normal text-[#607b8d]">optioneel · voor leadmatching</span></span><input className="content-input" placeholder="Plak hier de vacature-code uit OTYS" value={selected.otysVacancyId ?? ""} onChange={(event) => patchSelected({ otysVacancyId: event.target.value })} onBlur={() => void persistSelected({ otysVacancyId: selected.otysVacancyId ?? "" })} /></label>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <button className="secondary-button justify-center disabled:cursor-wait disabled:opacity-60" onClick={regenerateCopy} disabled={isGeneratingCopy}>{isGeneratingCopy ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}Nieuwe tekstvariant</button>
                           <button className="secondary-button justify-center disabled:cursor-wait disabled:opacity-60" onClick={regenerateBackground} disabled={isGeneratingBackground}>{isGeneratingBackground ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Nieuwe achtergrond</button>

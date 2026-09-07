@@ -1,0 +1,1 @@
+ALTER TABLE `campaigns` ADD `otys_vacancy_id` text;

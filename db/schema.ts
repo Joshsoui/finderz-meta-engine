@@ -23,6 +23,8 @@ export const campaigns = sqliteTable(
     logoImageUrl: text("logo_image_url"),
     /** JSON: { "1:1": url, "1.91:1": url, "9:16": url } -- the branded creative baked and uploaded per placement shape when the campaign first goes live. */
     finalCreativeImagesJson: text("final_creative_images_json"),
+    /** OTYS vacancy identifier, passed to Meta as a lead form tracking parameter so OTYS can match incoming leads to the right vacancy. */
+    otysVacancyId: text("otys_vacancy_id"),
     qualityLeads: integer("quality_leads").notNull().default(0),
     metaCampaignId: text("meta_campaign_id"),
     metaLeadFormId: text("meta_lead_form_id"),

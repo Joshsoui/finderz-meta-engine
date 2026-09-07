@@ -10,6 +10,7 @@ type CreateCampaignInput = VacancyInput & {
   backgroundPrompt?: string;
   backgroundImageUrl?: string;
   logoImageUrl?: string;
+  otysVacancyId?: string;
 };
 
 export async function GET() {
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       creativePrompt: backgroundPrompt,
       backgroundImageUrl: input.backgroundImageUrl,
       logoImageUrl: input.logoImageUrl,
+      otysVacancyId: input.otysVacancyId?.trim() || undefined,
       createdAt: now,
       updatedAt: now,
     }).returning();

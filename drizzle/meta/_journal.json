@@ -57,6 +57,13 @@
       "when": 1788824630844,
       "tag": "0007_dark_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788825080138,
+      "tag": "0008_classy_ghost_rider",
+      "breakpoints": true
     }
   ]
 }

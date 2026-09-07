@@ -17,6 +17,7 @@ type UpdateCampaignInput = {
   backgroundImageUrl?: string;
   logoImageUrl?: string;
   finalCreativeImagesJson?: string;
+  otysVacancyId?: string;
   qualityLeads?: number;
   metaCampaignId?: string;
 };
@@ -40,6 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.backgroundImageUrl) update.backgroundImageUrl = input.backgroundImageUrl;
     if (input.logoImageUrl) update.logoImageUrl = input.logoImageUrl;
     if (input.finalCreativeImagesJson) update.finalCreativeImagesJson = input.finalCreativeImagesJson;
+    if (input.otysVacancyId !== undefined) update.otysVacancyId = input.otysVacancyId.trim() || null;
     if (Number.isFinite(input.qualityLeads)) update.qualityLeads = Math.max(0, Math.round(input.qualityLeads!));
     if (input.metaCampaignId) update.metaCampaignId = input.metaCampaignId;
 
@@ -72,6 +74,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         headline: update.headline ?? existing.headline,
         description: update.descriptionText ?? existing.descriptionText,
         imageUrls: { square: toAbsolute(images["1:1"]), landscape: toAbsolute(images["1.91:1"]), story: toAbsolute(images["9:16"]) },
+        otysVacancyId: (update.otysVacancyId ?? existing.otysVacancyId) || undefined,
       });
       update.metaCampaignId = metaCampaignId;
       update.metaLeadFormId = metaLeadFormId;
