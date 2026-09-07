@@ -18,6 +18,8 @@ Meta-only recruitment campaign control voor Finderz Keeperz.
 - API-routes voor vacatureanalyse, campagneopslag, Meta-status en campagne-evaluatie.
 - D1-datamodel voor campagnes, metric snapshots en optimalisatieacties.
 - Gegenereerde achtergronden worden duurzaam opgeslagen in een R2-bucket (via `/media/...`).
+- Toegang tot het hele dashboard en alle API-routes is afgeschermd met Cloudflare Access
+  (alleen `@finderzkeeperz.nl`-adressen, login via e-mail-eenmalige-code).
 
 ## API
 
@@ -73,14 +75,20 @@ npm run deploy
 `OPENAI_TEXT_MODEL` en `OPENAI_IMAGE_MODEL` zijn optioneel (vallen terug op respectievelijk
 `gpt-5-mini` en `gpt-image-2`); zet ze als losse `vars` in `wrangler.jsonc` als je een ander model wilt.
 
+### Toegang (Cloudflare Access)
+
+Het hele domein (dashboard + alle `/api/*`-routes) staat achter een Cloudflare Access-app met
+een policy die `@finderzkeeperz.nl` toelaat. Dit is Cloudflare-side configuratie, niet iets in
+de repo-code. Beheren/uitbreiden (bijv. een los e-mailadres buiten het domein toevoegen) kan via
+**Zero Trust → Access → Applications → Finderz Meta Engine** in het dashboard.
+
 ## Productievolgorde
 
 1. Meta-advertentieaccount en Facebookpagina koppelen.
 2. Bestaande Meta Lead Forms uitlezen en bij nieuwe campagnes kunnen selecteren.
 3. Dashboard laten praten met /api/campaigns (laden + opslaan) in plaats van lokale mock-data.
-4. Authenticatie voor dashboard en API-routes.
-5. Campagnes vanuit het dashboard publiceren in een controlemodus.
-6. Monitoring elke 15 minuten laten draaien (cron trigger); automatische wijzigingen eerst loggen en begrenzen.
-7. Leadkwaliteit terugvoeren, zodat niet alleen op goedkope maar op bruikbare leads wordt geoptimaliseerd.
+4. Campagnes vanuit het dashboard publiceren in een controlemodus.
+5. Monitoring elke 15 minuten laten draaien (cron trigger); automatische wijzigingen eerst loggen en begrenzen.
+6. Leadkwaliteit terugvoeren, zodat niet alleen op goedkope maar op bruikbare leads wordt geoptimaliseerd.
 
 OTYS en LinkedIn vallen bewust buiten deze versie.
