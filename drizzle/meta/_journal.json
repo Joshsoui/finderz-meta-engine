@@ -22,6 +22,13 @@
       "when": 1788792720999,
       "tag": "0002_uneven_crusher_hogan",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788804518512,
+      "tag": "0003_majestic_mister_fear",
+      "breakpoints": true
     }
   ]
 }

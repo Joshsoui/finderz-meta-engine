@@ -21,6 +21,7 @@ export const campaigns = sqliteTable(
     creativePrompt: text("creative_prompt").notNull(),
     backgroundImageUrl: text("background_image_url"),
     logoImageUrl: text("logo_image_url"),
+    qualityLeads: integer("quality_leads").notNull().default(0),
     metaCampaignId: text("meta_campaign_id"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),

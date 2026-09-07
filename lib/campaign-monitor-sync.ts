@@ -28,6 +28,7 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
       frequency: snapshot.frequencyHundredths / 100,
       targetCpl: campaign.targetCplCents / 100,
       maxBudget: campaign.maxBudgetCents / 100,
+      qualityLeads: campaign.qualityLeads,
     });
 
     const now = new Date().toISOString();

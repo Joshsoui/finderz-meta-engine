@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit, Check,
-  ChevronRight, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
+  CheckCircle2, ChevronRight, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
   Megaphone, MousePointerClick, Pause, Play,
   RefreshCw, Search, ShieldCheck, Sparkles, Target, Upload,
   TrendingUp, Users, Zap, LoaderCircle,
@@ -106,8 +106,11 @@ export default function Home() {
     const fee = campaigns.reduce((sum, campaign) => sum + campaign.fee, 0);
     const maxBudget = campaigns.reduce((sum, campaign) => sum + campaign.maxBudget, 0);
     const profit = fee - spend;
+    const confirmed = campaigns.filter((campaign) => campaign.status === "completed");
+    const confirmedProfit = confirmed.reduce((sum, campaign) => sum + (campaign.fee - campaign.spend), 0);
     return {
-      spend, leads, fee, maxBudget, profit,
+      spend, leads, fee, maxBudget, profit, confirmedProfit,
+      confirmedCount: confirmed.length,
       cpl: leads ? spend / leads : 0,
       ctr: impressions ? (clicks / impressions) * 100 : 0,
       budgetUsed: maxBudget ? Math.min((spend / maxBudget) * 100, 100) : 0,
@@ -337,11 +340,13 @@ export default function Home() {
                   <span className="text-sm font-bold text-[#73cbe5]">{Math.round(totals.budgetUsed)}%</span>
                 </div>
                 <Progress value={totals.budgetUsed} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />
-                <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de actuele stand over alle campagnes samen. Een uitsplitsing per dag/week/maand/jaar komt zodra er live spenddata vanuit Meta binnenkomt.</p>
+                <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de actuele stand over alle campagnes samen. &quot;Verwachte winst&quot; telt elke campagne mee op basis van de opgegeven fee; &quot;bevestigde winst&quot; telt alleen campagnes die op status &quot;Afgerond&quot; staan (plaatsing bevestigd). Een uitsplitsing per dag/week/maand/jaar komt zodra er live spenddata vanuit Meta binnenkomt.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="budget-stat"><span>Totale fee</span><strong>{euro.format(totals.fee)}</strong></div>
-                <div className="budget-stat"><span>Winst (fee − spend)</span><strong style={{ color: totals.profit >= 0 ? "#5cc8e8" : "#d9787d" }}>{euro.format(totals.profit)}</strong></div>
+                <div className="budget-stat"><span>Bevestigde plaatsingen</span><strong>{totals.confirmedCount}</strong></div>
+                <div className="budget-stat"><span>Verwachte winst (fee − spend)</span><strong style={{ color: totals.profit >= 0 ? "#5cc8e8" : "#d9787d" }}>{euro.format(totals.profit)}</strong></div>
+                <div className="budget-stat"><span>Bevestigde winst</span><strong style={{ color: totals.confirmedProfit >= 0 ? "#5cc8e8" : "#d9787d" }}>{euro.format(totals.confirmedProfit)}</strong></div>
               </div>
             </div>
           </section>
@@ -423,16 +428,16 @@ export default function Home() {
                         {!selected.backgroundImage && <div className="creative-notice"><ImageIcon className="size-4" />Nog geen AI-achtergrond</div>}
                       </div>
                       <div className="space-y-5">
-                        <label><span className="content-label">Primaire tekst</span><textarea className="content-input min-h-28 resize-y" value={selected.primaryText} onChange={(event) => patchSelected({ primaryText: event.target.value })} /></label>
+                        <label><span className="content-label">Primaire tekst</span><textarea className="content-input min-h-28 resize-y" value={selected.primaryText} onChange={(event) => patchSelected({ primaryText: event.target.value })} onBlur={() => void persistSelected({ primaryText: selected.primaryText })} /></label>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <label><span className="content-label">Kop</span><input className="content-input" value={selected.headline} onChange={(event) => patchSelected({ headline: event.target.value })} /></label>
-                          <label><span className="content-label">Beschrijving</span><input className="content-input" value={selected.adDescription || "Bekijk de vacature"} onChange={(event) => patchSelected({ adDescription: event.target.value })} /></label>
+                          <label><span className="content-label">Kop</span><input className="content-input" value={selected.headline} onChange={(event) => patchSelected({ headline: event.target.value })} onBlur={() => void persistSelected({ headline: selected.headline })} /></label>
+                          <label><span className="content-label">Beschrijving</span><input className="content-input" value={selected.adDescription || "Bekijk de vacature"} onChange={(event) => patchSelected({ adDescription: event.target.value })} onBlur={() => void persistSelected({ description: selected.adDescription })} /></label>
                         </div>
                         <div><span className="content-label">USP-blokken</span><div className="grid gap-2">{selected.usps.map((usp, index) => <input key={index} className="content-input" value={usp} onChange={(event) => {
                           const usps = [...selected.usps] as [string, string, string];
                           usps[index] = event.target.value;
                           patchSelected({ usps });
-                        }} />)}</div></div>
+                        }} onBlur={() => void persistSelected({ usps: selected.usps })} />)}</div></div>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <button className="secondary-button justify-center disabled:cursor-wait disabled:opacity-60" onClick={regenerateCopy} disabled={isGeneratingCopy}>{isGeneratingCopy ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}Nieuwe tekstvariant</button>
                           <button className="secondary-button justify-center disabled:cursor-wait disabled:opacity-60" onClick={regenerateBackground} disabled={isGeneratingBackground}>{isGeneratingBackground ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}Nieuwe achtergrond</button>
@@ -457,14 +462,24 @@ export default function Home() {
               <article className="panel p-5">
                 <div className="flex items-start justify-between gap-4"><div><div className="eyebrow"><BrainCircuit className="size-3.5" />Automatische analyse</div><h2 className="mt-2">Aanbevolen actie</h2></div><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]"><Zap className="size-5" /></div></div>
                 <div className="mt-5 rounded-xl border border-[#206389] bg-[#13425e] p-4"><p className="text-sm leading-6 text-[#bbced9]">{selected.recommendation}</p></div>
-                <button className="primary-button mt-4 w-full justify-center" onClick={() => {
-                  if (selected.status === "paused") updateSelected({ status: "draft", recommendation: "Campagne staat klaar voor een nieuwe creative en teksthoek." }, "Campagne teruggezet naar concept");
-                  else if (selected.status === "draft") updateSelected({ status: "live", recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." }, "Campagne gestart in sandbox");
-                  else updateSelected({ maxBudget: Math.round(selected.maxBudget * 1.15) }, "Aanbevolen optimalisatie toegepast");
-                }}>
-                  {selected.status === "paused" ? <RefreshCw className="size-4" /> : selected.status === "draft" ? <Play className="size-4" /> : <ArrowUpRight className="size-4" />}{selected.nextAction}
-                </button>
-                {selected.status !== "paused" && <button className="danger-button mt-2 w-full justify-center" onClick={() => updateSelected({ status: "paused", nextAction: "Herbouw campagne" }, "Campagne gepauzeerd")}><Pause className="size-4" />Campagne pauzeren</button>}
+                {selected.status !== "completed" && (
+                  <button className="primary-button mt-4 w-full justify-center" onClick={() => {
+                    if (selected.status === "paused") updateSelected({ status: "draft", recommendation: "Campagne staat klaar voor een nieuwe creative en teksthoek." }, "Campagne teruggezet naar concept");
+                    else if (selected.status === "draft") updateSelected({ status: "live", recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." }, "Campagne gestart in sandbox");
+                    else updateSelected({ maxBudget: Math.round(selected.maxBudget * 1.15) }, "Aanbevolen optimalisatie toegepast");
+                  }}>
+                    {selected.status === "paused" ? <RefreshCw className="size-4" /> : selected.status === "draft" ? <Play className="size-4" /> : <ArrowUpRight className="size-4" />}{selected.nextAction}
+                  </button>
+                )}
+                {selected.status !== "paused" && selected.status !== "completed" && <button className="danger-button mt-2 w-full justify-center" onClick={() => updateSelected({ status: "paused", nextAction: "Herbouw campagne" }, "Campagne gepauzeerd")}><Pause className="size-4" />Campagne pauzeren</button>}
+                {selected.status !== "completed" && (
+                  <button
+                    className="secondary-button mt-2 w-full justify-center"
+                    onClick={() => updateSelected({ status: "completed", recommendation: "Plaatsing bevestigd. Deze campagne telt mee in de bevestigde winst.", nextAction: "Bekijk resultaten" }, "Campagne gemarkeerd als afgerond")}
+                  >
+                    <CheckCircle2 className="size-4" />Markeer als afgerond (plaatsing bevestigd)
+                  </button>
+                )}
               </article>
 
               <article className="panel p-5">

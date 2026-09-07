@@ -17,7 +17,11 @@ export type CampaignMetrics = {
   frequency: number;
   targetCpl: number;
   maxBudget: number;
+  /** Cumulative leads a recruiter has manually marked as usable/qualified, out of `leads`. Optional: unknown until someone has reviewed the leads. */
+  qualityLeads?: number;
 };
+
+export const MIN_LEAD_QUALITY_RATIO = 0.5;
 
 export type OptimizationDecision = {
   rule: string;
@@ -122,11 +126,20 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
     };
   }
   if (metrics.leads >= 3 && cpl <= metrics.targetCpl) {
+    if (Number.isFinite(metrics.qualityLeads) && metrics.qualityLeads! / metrics.leads < MIN_LEAD_QUALITY_RATIO) {
+      return {
+        rule: "low_lead_quality",
+        severity: "attention",
+        action: "keep_running",
+        recommendation: "CPL is goed, maar minder dan de helft van de leads is bruikbaar. Niet opschalen; pas eerst de doelgroep of het formulier aan.",
+        budgetChangePercent: 0,
+      };
+    }
     return {
       rule: "healthy_cpl",
       severity: "info",
       action: "scale_budget",
-      recommendation: "Campagne presteert binnen de doel-CPL. Verhoog het dagbudget gecontroleerd met maximaal 15%.",
+      recommendation: "Campagne presteert binnen de doel-CPL met voldoende bruikbare leads. Verhoog het dagbudget gecontroleerd met maximaal 15%.",
       budgetChangePercent: 15,
     };
   }

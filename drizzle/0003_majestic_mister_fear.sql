@@ -1,0 +1,1 @@
+ALTER TABLE `campaigns` ADD `quality_leads` integer DEFAULT 0 NOT NULL;

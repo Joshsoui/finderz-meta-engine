@@ -15,6 +15,7 @@ type UpdateCampaignInput = {
   usps?: [string, string, string];
   backgroundImageUrl?: string;
   logoImageUrl?: string;
+  qualityLeads?: number;
   metaCampaignId?: string;
 };
 
@@ -36,6 +37,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.usps && input.usps.length === 3) update.uspsJson = JSON.stringify(input.usps);
     if (input.backgroundImageUrl) update.backgroundImageUrl = input.backgroundImageUrl;
     if (input.logoImageUrl) update.logoImageUrl = input.logoImageUrl;
+    if (Number.isFinite(input.qualityLeads)) update.qualityLeads = Math.max(0, Math.round(input.qualityLeads!));
     if (input.metaCampaignId) update.metaCampaignId = input.metaCampaignId;
 
     const db = await getDb();

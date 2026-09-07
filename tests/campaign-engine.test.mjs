@@ -17,7 +17,7 @@ after(async () => {
   await vite.close();
 });
 
-const { generateCampaign, evaluateCampaign, MAX_BUDGET_SHARE } = await vite.ssrLoadModule("/lib/campaign-engine.ts");
+const { generateCampaign, evaluateCampaign, MAX_BUDGET_SHARE, MIN_LEAD_QUALITY_RATIO } = await vite.ssrLoadModule("/lib/campaign-engine.ts");
 
 const baseVacancy = {
   title: "Elektromonteur Infra",
@@ -154,4 +154,30 @@ test("evaluateCampaign prioritizes the budget ceiling over every other rule", ()
   const decision = evaluateCampaign(baseMetrics({ spend: 1600, leads: 5, targetCpl: 50, frequency: 5 }));
   // Also matches cpl_above_limit and creative_fatigue, but budget_ceiling must win.
   assert.equal(decision.rule, "budget_ceiling");
+});
+
+test("MIN_LEAD_QUALITY_RATIO is 50%", () => {
+  assert.equal(MIN_LEAD_QUALITY_RATIO, 0.5);
+});
+
+test("evaluateCampaign refuses to scale the budget when a healthy CPL has too few quality leads", () => {
+  const decision = evaluateCampaign(baseMetrics({ spend: 100, leads: 4, targetCpl: 50, qualityLeads: 1 }));
+  // cpl = 25 <= target 50, but only 1/4 = 25% of leads are usable.
+  assert.equal(decision.rule, "low_lead_quality");
+  assert.equal(decision.action, "keep_running");
+  assert.equal(decision.budgetChangePercent, 0);
+});
+
+test("evaluateCampaign scales the budget on a healthy CPL right at the quality threshold", () => {
+  const decision = evaluateCampaign(baseMetrics({ spend: 100, leads: 4, targetCpl: 50, qualityLeads: 2 }));
+  // Exactly 2/4 = 50% meets MIN_LEAD_QUALITY_RATIO, so this should not be held back.
+  assert.equal(decision.rule, "healthy_cpl");
+  assert.equal(decision.action, "scale_budget");
+});
+
+test("evaluateCampaign scales the budget on a healthy CPL when lead quality hasn't been reviewed yet", () => {
+  const decision = evaluateCampaign(baseMetrics({ spend: 100, leads: 4, targetCpl: 50 }));
+  // qualityLeads omitted entirely (nobody has reviewed the leads yet) -> don't block on it.
+  assert.equal(decision.rule, "healthy_cpl");
+  assert.equal(decision.action, "scale_budget");
 });
