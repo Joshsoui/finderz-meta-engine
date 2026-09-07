@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit,
-  CheckCircle2, ChevronRight, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
+  CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
   Megaphone, MousePointerClick, Pause, Play,
   RefreshCw, Search, ShieldCheck, Sparkles, Target, Upload,
   TrendingUp, Users, Zap, LoaderCircle,
@@ -55,13 +55,11 @@ function CreativePreview({ campaign, format }: { campaign: Campaign; format: Cre
             <div className="creative-title-banner-job">{campaign.title}</div>
             <div className="creative-title-banner-location">{campaign.location}</div>
           </div>
-          <div className="creative-usp-panel">
-            {campaign.usps.map((usp) => (
-              <div className="creative-usp-row" key={usp}>
-                <span className="creative-usp-icon"><ChevronRight className="size-3" /></span>
-                <span>{usp}</span>
-              </div>
-            ))}
+          <div className="creative-stat-row">
+            <div className="creative-stat-callout">
+              <div className="creative-stat-label">SALARIS</div>
+              <div className="creative-stat-value">{campaign.usps[0]}</div>
+            </div>
           </div>
           <div className="creative-cta-pill">SOLLICITEER NU</div>
         </div>
