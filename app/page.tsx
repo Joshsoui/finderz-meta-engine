@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit,
   CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
-  Megaphone, MousePointerClick, Pause, Play,
+  Megaphone, MousePointerClick, Pause, Pencil, Play,
   RefreshCw, Search, ShieldCheck, Sparkles, Target, Upload,
   TrendingUp, Users, Zap, LoaderCircle,
 } from "lucide-react";
@@ -82,6 +82,121 @@ function TrendChart() {
       </svg>
       <div className="mt-2 flex justify-between text-xs text-[#6f8798]"><span>25 aug</span><span>28 aug</span><span>31 aug</span><span>3 sep</span><span>5 sep</span></div>
     </div>
+  );
+}
+
+type DailySpendEntry = { date: string; amountCents: number };
+
+function formatDayLabel(date: string, today: string) {
+  if (date === today) return "Vandaag";
+  const [year, month, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("nl-NL", { weekday: "short", day: "numeric", month: "short" }).format(new Date(year, month - 1, day));
+}
+
+function DailySpendCard() {
+  const [today, setToday] = useState("");
+  const [entries, setEntries] = useState<DailySpendEntry[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/daily-spend");
+        const payload = await response.json() as { today?: string; entries?: DailySpendEntry[]; error?: string };
+        if (!response.ok || !payload.today) throw new Error(payload.error || "Dagtotaal kon niet worden geladen.");
+        if (cancelled) return;
+        setToday(payload.today);
+        setEntries(payload.entries ?? []);
+      } catch (error) {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Dagtotaal kon niet worden geladen.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const todayEntry = entries.find((entry) => entry.date === today);
+  const weekTotal = entries.slice(0, 7).reduce((sum, entry) => sum + entry.amountCents, 0) / 100;
+
+  function startEditing() {
+    setDraft(todayEntry ? String(todayEntry.amountCents / 100).replace(".", ",") : "");
+    setIsEditing(true);
+  }
+
+  async function saveToday() {
+    const amount = Number(draft.replace(",", "."));
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error("Vul een geldig bedrag in.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/daily-spend", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: today, amount }),
+      });
+      const payload = await response.json() as { entry?: DailySpendEntry; error?: string };
+      if (!response.ok || !payload.entry) throw new Error(payload.error || "Dagtotaal kon niet worden opgeslagen.");
+      const saved = payload.entry;
+      setEntries((current) => [saved, ...current.filter((entry) => entry.date !== saved.date)].sort((a, b) => b.date.localeCompare(a.date)));
+      setIsEditing(false);
+      toast.success("Dagtotaal bijgewerkt");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Dagtotaal kon niet worden opgeslagen.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="daily-spend-card">
+      <div className="daily-spend-main">
+        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Vandaag besteed aan campagnes</div>
+        {isEditing ? (
+          <div className="daily-spend-edit">
+            <span className="daily-spend-prefix">€</span>
+            <input
+              autoFocus
+              className="daily-spend-input"
+              inputMode="decimal"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && void saveToday()}
+              placeholder="0"
+            />
+            <button className="primary-button" onClick={saveToday} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Opslaan</button>
+            <button className="secondary-button" onClick={() => setIsEditing(false)}>Annuleren</button>
+          </div>
+        ) : (
+          <div className="daily-spend-display">
+            <span className="daily-spend-amount">{isLoading ? "…" : euro.format((todayEntry?.amountCents ?? 0) / 100)}</span>
+            <button className="secondary-button" onClick={startEditing}><Pencil className="size-4" />{todayEntry ? "Bewerken" : "Invullen"}</button>
+          </div>
+        )}
+        <p className="daily-spend-hint">Vul hier dagelijks het totaal in dat je in Meta Ads Manager ziet — dan hoeft dit niet meer los in een sheet.</p>
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">Laatste 7 dagen</span>
+        <strong className="daily-spend-week-total">{euro.format(weekTotal)}</strong>
+        <div className="daily-spend-days">
+          {entries.slice(0, 7).map((entry) => (
+            <div className="daily-spend-day" key={entry.date}>
+              <span>{formatDayLabel(entry.date, today)}</span>
+              <strong>{euro.format(entry.amountCents / 100)}</strong>
+            </div>
+          ))}
+          {!isLoading && entries.length === 0 && <p className="daily-spend-empty">Nog geen dagen ingevuld.</p>}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -317,15 +432,17 @@ export default function Home() {
       subtitle="Vrijdag 5 september · laatste analyse 2 min geleden"
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
+          <DailySpendCard />
+
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Actieve campagnes", value: String(campaigns.filter((campaign) => campaign.status === "live").length), sub: campaigns.length + " campagnes totaal", icon: Megaphone },
-              { label: "Totale spend", value: euro.format(totals.spend), sub: "over alle campagnes", icon: CircleDollarSign },
-              { label: "Nieuwe leads", value: String(totals.leads), sub: "over alle campagnes", icon: Users },
-              { label: "Gemiddelde CPL", value: euro.format(totals.cpl), sub: totals.ctr.toFixed(2).replace(".", ",") + "% gem. CTR", icon: Target },
+              { label: "Actieve campagnes", value: String(campaigns.filter((campaign) => campaign.status === "live").length), sub: campaigns.length + " campagnes totaal", icon: Megaphone, tone: "blue" },
+              { label: "Totale spend", value: euro.format(totals.spend), sub: "over alle campagnes", icon: CircleDollarSign, tone: "green" },
+              { label: "Nieuwe leads", value: String(totals.leads), sub: "over alle campagnes", icon: Users, tone: "amber" },
+              { label: "Gemiddelde CPL", value: euro.format(totals.cpl), sub: totals.ctr.toFixed(2).replace(".", ",") + "% gem. CTR", icon: Target, tone: "purple" },
             ].map((metric) => (
               <article className="metric-card" key={metric.label}>
-                <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-[#7f97a8]">{metric.label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-white">{metric.value}</p></div><div className="metric-icon"><metric.icon className="size-[18px]" /></div></div>
+                <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-[#7f97a8]">{metric.label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-white">{metric.value}</p></div><div className={"metric-icon metric-icon-" + metric.tone}><metric.icon className="size-[18px]" /></div></div>
                 <p className="mt-3 flex items-center gap-1.5 text-xs text-[#668194]"><TrendingUp className="size-3.5 text-[#35b7df]" />{metric.sub}</p>
               </article>
             ))}
@@ -394,9 +511,17 @@ export default function Home() {
                   <span className={"status status-" + selected.status}><span />{statusLabel(selected.status)}</span>
                 </div>
                 <Tabs defaultValue="performance" className="gap-0">
-                  <TabsList variant="line" className="scrollbar-none w-full justify-start gap-6 overflow-x-auto border-b border-white/8 px-5">
-                    {["performance", "creative", "automation"].map((value, index) => <TabsTrigger key={value} value={value} className="h-11 flex-none px-0 text-[#7891a2] data-[state=active]:text-white after:bg-[#35b7df]">{["Prestaties", "Creative", "Automatisering"][index]}</TabsTrigger>)}
-                  </TabsList>
+                  <div className="section-tabs-wrap">
+                    <TabsList variant="line" className="section-tabs scrollbar-none">
+                      {[
+                        { value: "performance", label: "Prestaties", icon: Activity },
+                        { value: "creative", label: "Creative", icon: ImageIcon },
+                        { value: "automation", label: "Automatisering", icon: Zap },
+                      ].map(({ value, label, icon: Icon }) => (
+                        <TabsTrigger key={value} value={value} className="section-tab"><Icon className="size-4" />{label}</TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
                   <TabsContent value="performance" className="p-5">
                     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,.7fr)]">
                       <div>

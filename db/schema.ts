@@ -64,6 +64,12 @@ export const pipelineVacancies = sqliteTable(
   (table) => [index("idx_pipeline_status_updated").on(table.status, table.updatedAt)]
 );
 
+export const dailySpendLog = sqliteTable("daily_spend_log", {
+  date: text("date").primaryKey(), // YYYY-MM-DD, Europe/Amsterdam local date
+  amountCents: integer("amount_cents").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const optimizationActions = sqliteTable(
   "optimization_actions",
   {
