@@ -2,62 +2,98 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns, metricSnapshots, optimizationActions } from "@/db/schema";
 import { evaluateCampaign } from "@/lib/campaign-engine";
+import { fetchCampaignInsights, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
 
 export async function runCampaignMonitor(): Promise<{ evaluated: number; actionsApplied: number }> {
   const db = await getDb();
   const liveCampaigns = await db.select().from(campaigns).where(eq(campaigns.status, "live"));
+  const credentials = getMetaCredentials();
 
   let actionsApplied = 0;
 
   for (const campaign of liveCampaigns) {
-    const [snapshot] = await db
-      .select()
-      .from(metricSnapshots)
-      .where(eq(metricSnapshots.campaignId, campaign.id))
-      .orderBy(desc(metricSnapshots.recordedAt))
-      .limit(1);
+    try {
+      let snapshot: { spendCents: number; impressions: number; clicks: number; leads: number; frequencyHundredths: number } | undefined;
 
-    // No metrics recorded yet for this campaign (no Meta polling wired up) — nothing to evaluate.
-    if (!snapshot) continue;
+      if (credentials && campaign.metaCampaignId) {
+        // Meta is connected: pull today's real numbers and record them as a
+        // fresh snapshot, so the automatisering/optimalisaties history stays
+        // an accurate log of what actually happened, not just a re-read of
+        // whatever was last there.
+        const insights = await fetchCampaignInsights(campaign.metaCampaignId, "today");
+        const [inserted] = await db
+          .insert(metricSnapshots)
+          .values({
+            campaignId: campaign.id,
+            impressions: insights.impressions,
+            clicks: insights.clicks,
+            leads: insights.leads,
+            spendCents: Math.round(insights.spend * 100),
+            frequencyHundredths: Math.round(insights.frequency * 100),
+            recordedAt: new Date().toISOString(),
+          })
+          .returning();
+        snapshot = inserted;
+      } else {
+        // Sandbox / not yet connected to this specific campaign on Meta:
+        // fall back to whatever snapshot was last recorded (seeded manually
+        // for testing, since there's no live polling to produce one).
+        const [latest] = await db
+          .select()
+          .from(metricSnapshots)
+          .where(eq(metricSnapshots.campaignId, campaign.id))
+          .orderBy(desc(metricSnapshots.recordedAt))
+          .limit(1);
+        snapshot = latest;
+      }
 
-    const decision = evaluateCampaign({
-      spend: snapshot.spendCents / 100,
-      impressions: snapshot.impressions,
-      clicks: snapshot.clicks,
-      leads: snapshot.leads,
-      frequency: snapshot.frequencyHundredths / 100,
-      targetCpl: campaign.targetCplCents / 100,
-      maxBudget: campaign.maxBudgetCents / 100,
-      qualityLeads: campaign.qualityLeads,
-    });
+      if (!snapshot) continue;
 
-    const now = new Date().toISOString();
-    const campaignUpdate: Partial<typeof campaigns.$inferInsert> = {
-      spentCents: snapshot.spendCents,
-      updatedAt: now,
-    };
-
-    if (decision.action === "pause") {
-      campaignUpdate.status = "paused";
-    } else if (decision.action === "refresh_creative") {
-      campaignUpdate.status = "attention";
-    } else if (decision.action === "scale_budget") {
-      campaignUpdate.maxBudgetCents = Math.round(campaign.maxBudgetCents * (1 + decision.budgetChangePercent / 100));
-    }
-
-    await db.update(campaigns).set(campaignUpdate).where(eq(campaigns.id, campaign.id));
-
-    if (decision.rule !== "learning") {
-      await db.insert(optimizationActions).values({
-        campaignId: campaign.id,
-        rule: decision.rule,
-        severity: decision.severity,
-        recommendation: decision.recommendation,
-        status: "applied",
-        createdAt: now,
-        appliedAt: now,
+      const decision = evaluateCampaign({
+        spend: snapshot.spendCents / 100,
+        impressions: snapshot.impressions,
+        clicks: snapshot.clicks,
+        leads: snapshot.leads,
+        frequency: snapshot.frequencyHundredths / 100,
+        targetCpl: campaign.targetCplCents / 100,
+        maxBudget: campaign.maxBudgetCents / 100,
+        qualityLeads: campaign.qualityLeads,
       });
-      actionsApplied += 1;
+
+      const now = new Date().toISOString();
+      const campaignUpdate: Partial<typeof campaigns.$inferInsert> = {
+        spentCents: snapshot.spendCents,
+        updatedAt: now,
+      };
+
+      if (decision.action === "pause") {
+        campaignUpdate.status = "paused";
+        if (credentials && campaign.metaCampaignId) await setMetaCampaignStatus(campaign.metaCampaignId, "PAUSED");
+      } else if (decision.action === "refresh_creative") {
+        campaignUpdate.status = "attention";
+      } else if (decision.action === "scale_budget") {
+        campaignUpdate.maxBudgetCents = Math.round(campaign.maxBudgetCents * (1 + decision.budgetChangePercent / 100));
+        if (credentials && campaign.metaCampaignId) await updateMetaCampaignBudget(campaign.metaCampaignId, campaignUpdate.maxBudgetCents);
+      }
+
+      await db.update(campaigns).set(campaignUpdate).where(eq(campaigns.id, campaign.id));
+
+      if (decision.rule !== "learning") {
+        await db.insert(optimizationActions).values({
+          campaignId: campaign.id,
+          rule: decision.rule,
+          severity: decision.severity,
+          recommendation: decision.recommendation,
+          status: "applied",
+          createdAt: now,
+          appliedAt: now,
+        });
+        actionsApplied += 1;
+      }
+    } catch (error) {
+      // One campaign's Meta call failing (rate limit, expired token, ...)
+      // shouldn't stop the rest of the portfolio from being evaluated.
+      console.error(`Campaign monitor failed for campaign ${campaign.id}`, error);
     }
   }
 
