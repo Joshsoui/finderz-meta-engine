@@ -57,7 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return Response.json({ error: "Genereer eerst een AI-achtergrond voordat je live gaat" }, { status: 400 });
       }
       const origin = new URL(request.url).origin;
-      const { metaCampaignId } = await createMetaCampaign({
+      const { metaCampaignId, metaLeadFormId } = await createMetaCampaign({
         title: existing.title,
         location: existing.location,
         dailyBudgetCents: update.maxBudgetCents ?? existing.maxBudgetCents,
@@ -67,6 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         imageUrl: `${origin}${existing.backgroundImageUrl}`,
       });
       update.metaCampaignId = metaCampaignId;
+      update.metaLeadFormId = metaLeadFormId;
     } else if (credentials && existing.metaCampaignId && update.status === "paused") {
       await setMetaCampaignStatus(existing.metaCampaignId, "PAUSED");
     } else if (credentials && existing.metaCampaignId && update.status === "live") {

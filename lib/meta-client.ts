@@ -132,7 +132,7 @@ export type CreateMetaCampaignInput = {
  * ignore age/gender targeting regardless of what's requested here -- that's
  * expected, not a bug.
  */
-export async function createMetaCampaign(input: CreateMetaCampaignInput): Promise<{ metaCampaignId: string }> {
+export async function createMetaCampaign(input: CreateMetaCampaignInput): Promise<{ metaCampaignId: string; metaLeadFormId: string }> {
   const credentials = getMetaCredentials();
   if (!credentials) throw new Error("Meta is not configured (missing META_ACCESS_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID)");
 
@@ -199,7 +199,7 @@ export async function createMetaCampaign(input: CreateMetaCampaignInput): Promis
     },
   });
 
-  return { metaCampaignId: campaign.id };
+  return { metaCampaignId: campaign.id, metaLeadFormId: leadFormId };
 }
 
 export type MetaCampaignInsights = { spend: number; impressions: number; clicks: number; leads: number; frequency: number };
@@ -226,6 +226,34 @@ export async function fetchCampaignInsights(metaCampaignId: string, datePreset: 
     frequency: Number(row.frequency ?? 0),
     leads: Number(leadAction?.value ?? 0),
   };
+}
+
+export type MetaLead = { metaLeadId: string; fullName: string; email: string; phone: string; receivedAt: string };
+
+/**
+ * Fetches leads submitted on a lead form, newest first. Meta's `field_data` is
+ * a list of {name, values[]} pairs rather than a flat object, so pull out the
+ * three fields we ask for by name (full_name/email/phone -- matches the
+ * questions createLeadForm() configures) and tolerate any missing.
+ */
+export async function fetchNewLeads(leadFormId: string): Promise<MetaLead[]> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const result = await metaRequest<{
+    data?: Array<{ id: string; created_time: string; field_data?: Array<{ name: string; values: string[] }> }>;
+  }>(`/${leadFormId}/leads`, credentials.accessToken, { params: { fields: "id,created_time,field_data", limit: 100 } });
+
+  return (result.data ?? []).map((row) => {
+    const field = (name: string) => row.field_data?.find((entry) => entry.name === name)?.values[0] ?? "";
+    return {
+      metaLeadId: row.id,
+      fullName: field("full_name"),
+      email: field("email"),
+      phone: field("phone"),
+      receivedAt: row.created_time,
+    };
+  });
 }
 
 /** Pauses or resumes a campaign on Meta -- used when a decision rule fires, or a human toggles status in the app. */

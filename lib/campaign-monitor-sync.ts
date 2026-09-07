@@ -1,8 +1,8 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { campaigns, metricSnapshots, optimizationActions } from "@/db/schema";
+import { campaigns, leads, metricSnapshots, optimizationActions } from "@/db/schema";
 import { evaluateCampaign } from "@/lib/campaign-engine";
-import { fetchCampaignInsights, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
+import { fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
 
 export async function runCampaignMonitor(): Promise<{ evaluated: number; actionsApplied: number }> {
   const db = await getDb();
@@ -34,6 +34,19 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
           })
           .returning();
         snapshot = inserted;
+
+        if (campaign.metaLeadFormId) {
+          // New leads only add rows (never overwrite a quality rating a
+          // recruiter already set), so skip duplicates by metaLeadId rather
+          // than upserting.
+          const newLeads = await fetchNewLeads(campaign.metaLeadFormId);
+          for (const lead of newLeads) {
+            await db
+              .insert(leads)
+              .values({ campaignId: campaign.id, metaLeadId: lead.metaLeadId, fullName: lead.fullName, email: lead.email, phone: lead.phone, receivedAt: lead.receivedAt })
+              .onConflictDoNothing();
+          }
+        }
       } else {
         // Sandbox / not yet connected to this specific campaign on Meta:
         // fall back to whatever snapshot was last recorded (seeded manually

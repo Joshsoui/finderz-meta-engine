@@ -23,6 +23,7 @@ export const campaigns = sqliteTable(
     logoImageUrl: text("logo_image_url"),
     qualityLeads: integer("quality_leads").notNull().default(0),
     metaCampaignId: text("meta_campaign_id"),
+    metaLeadFormId: text("meta_lead_form_id"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -69,6 +70,22 @@ export const dailySpendLog = sqliteTable("daily_spend_log", {
   amountCents: integer("amount_cents").notNull(),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const leads = sqliteTable(
+  "leads",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    campaignId: text("campaign_id").notNull().references(() => campaigns.id),
+    metaLeadId: text("meta_lead_id").notNull().unique(),
+    fullName: text("full_name").notNull().default(""),
+    email: text("email").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    quality: text("quality", { enum: ["unrated", "good", "bad"] }).notNull().default("unrated"),
+    receivedAt: text("received_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_leads_campaign_received").on(table.campaignId, table.receivedAt)]
+);
 
 export const optimizationActions = sqliteTable(
   "optimization_actions",
