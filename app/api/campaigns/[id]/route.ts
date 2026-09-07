@@ -1,9 +1,12 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
+import { errorResponse } from "@/lib/api-error";
+
+const CAMPAIGN_STATUSES = ["draft", "live", "attention", "paused", "completed"] as const;
 
 type UpdateCampaignInput = {
-  status?: "draft" | "live" | "attention" | "paused" | "completed";
+  status?: string;
   maxBudget?: number;
   spend?: number;
   primaryText?: string;
@@ -19,9 +22,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const input = (await request.json()) as UpdateCampaignInput;
+    if (input.status && !CAMPAIGN_STATUSES.includes(input.status as typeof CAMPAIGN_STATUSES[number])) {
+      return Response.json({ error: "Invalid status value" }, { status: 400 });
+    }
 
     const update: Partial<typeof campaigns.$inferInsert> = { updatedAt: new Date().toISOString() };
-    if (input.status) update.status = input.status;
+    if (input.status) update.status = input.status as typeof CAMPAIGN_STATUSES[number];
     if (Number.isFinite(input.maxBudget)) update.maxBudgetCents = Math.round(input.maxBudget! * 100);
     if (Number.isFinite(input.spend)) update.spentCents = Math.round(input.spend! * 100);
     if (input.primaryText) update.primaryText = input.primaryText;
@@ -38,6 +44,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     return Response.json({ campaign });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Campaign could not be updated" }, { status: 500 });
+    return errorResponse(error, "Campaign could not be updated");
   }
 }

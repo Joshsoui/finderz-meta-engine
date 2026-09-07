@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
+import { errorResponse } from "@/lib/api-error";
 import { generateCampaign, type VacancyInput } from "@/lib/campaign-engine";
 
 type CreateCampaignInput = VacancyInput & {
@@ -17,7 +18,7 @@ export async function GET() {
     const rows = await db.select().from(campaigns).orderBy(desc(campaigns.updatedAt)).limit(100);
     return Response.json({ campaigns: rows });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Campaigns unavailable" }, { status: 500 });
+    return errorResponse(error, "Campaigns unavailable");
   }
 }
 
@@ -65,6 +66,6 @@ export async function POST(request: Request) {
     }).returning();
     return Response.json({ campaign, generated }, { status: 201 });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Campaign could not be created" }, { status: 500 });
+    return errorResponse(error, "Campaign could not be created");
   }
 }

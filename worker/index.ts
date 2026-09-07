@@ -1,6 +1,9 @@
 /** Cloudflare Worker entry point. */
 import handler from "vinext/server/app-router-entry";
+import { runCampaignMonitor } from "@/lib/campaign-monitor-sync";
 import { refreshPipeline } from "@/lib/pipeline-sync";
+
+const PIPELINE_CRON = "0 */6 * * *";
 
 interface Env {
   ASSETS: Fetcher;
@@ -24,8 +27,12 @@ const worker = {
     return handler.fetch(request, env, ctx);
   },
 
-  async scheduled(_event: ScheduledController, _env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(refreshPipeline().catch(() => {}));
+  async scheduled(event: ScheduledController, _env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === PIPELINE_CRON) {
+      ctx.waitUntil(refreshPipeline().catch(() => {}));
+    } else {
+      ctx.waitUntil(runCampaignMonitor().catch(() => {}));
+    }
   },
 };
 

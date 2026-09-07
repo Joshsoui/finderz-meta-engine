@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api-error";
 import { refreshPipeline } from "@/lib/pipeline-sync";
 
 export async function POST() {
@@ -5,6 +6,6 @@ export async function POST() {
     const result = await refreshPipeline();
     return Response.json(result);
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Pipeline verversen is niet gelukt" }, { status: 500 });
+    return errorResponse(error, "Pipeline verversen is niet gelukt");
   }
 }

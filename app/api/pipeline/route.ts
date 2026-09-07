@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { pipelineVacancies } from "@/db/schema";
+import { errorResponse } from "@/lib/api-error";
 
 type ManualVacancyInput = {
   title?: string;
@@ -17,7 +18,7 @@ export async function GET() {
     const rows = await db.select().from(pipelineVacancies).orderBy(desc(pipelineVacancies.updatedAt)).limit(200);
     return Response.json({ vacancies: rows });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Pipeline unavailable" }, { status: 500 });
+    return errorResponse(error, "Pipeline unavailable");
   }
 }
 
@@ -47,6 +48,6 @@ export async function POST(request: Request) {
 
     return Response.json({ vacancy }, { status: 201 });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Vacature kon niet worden toegevoegd" }, { status: 500 });
+    return errorResponse(error, "Vacature kon niet worden toegevoegd");
   }
 }
