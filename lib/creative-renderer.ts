@@ -79,6 +79,15 @@ function roundRect(context: CanvasRenderingContext2D, x: number, y: number, widt
   context.closePath();
 }
 
+function truncateToWidth(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (context.measureText(text).width <= maxWidth) return text;
+  let trimmed = text;
+  while (trimmed.length > 1 && context.measureText(`${trimmed}…`).width > maxWidth) {
+    trimmed = trimmed.slice(0, -1).trimEnd();
+  }
+  return `${trimmed}…`;
+}
+
 function drawFallbackBackground(context: CanvasRenderingContext2D, width: number, height: number) {
   const gradient = context.createLinearGradient(0, 0, width, height);
   gradient.addColorStop(0, "#15384a");
@@ -102,9 +111,14 @@ async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, w
     const badgeX = width - pad - drawWidth - badgePad;
     const badgeY = pad - badgePad;
 
-    context.fillStyle = "rgba(1,12,19,0.4)";
+    context.save();
+    context.shadowColor = "rgba(0,8,14,0.28)";
+    context.shadowBlur = Math.round(badgePad * 1.5);
+    context.shadowOffsetY = 2;
+    context.fillStyle = "rgba(255,255,255,0.94)";
     roundRect(context, badgeX, badgeY, drawWidth + badgePad * 2, drawHeight + badgePad * 2, badgePad);
     context.fill();
+    context.restore();
 
     context.drawImage(logo, width - pad - drawWidth, pad, drawWidth, drawHeight);
     return pad + drawHeight + badgePad;
@@ -144,7 +158,7 @@ function drawBannerAt(context: CanvasRenderingContext2D, data: CreativeData, wid
 type UspPanelMetrics = {
   panelX: number; panelWidth: number; panelHeight: number; innerPad: number;
   iconSize: number; uspFontSize: number; uspLineHeight: number; rowGap: number;
-  wrappedUsps: string[][]; rowHeights: number[];
+  uspLines: string[]; rowHeights: number[];
 };
 
 function measureUspPanel(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number): UspPanelMetrics {
@@ -158,11 +172,13 @@ function measureUspPanel(context: CanvasRenderingContext2D, data: CreativeData, 
   const textWidth = panelWidth - innerPad * 2 - iconSize - Math.round(base * 0.018);
 
   context.font = `700 ${uspFontSize}px ${HEADLINE_FONT}`;
-  const wrappedUsps = data.usps.map((usp) => wrapLines(context, usp, textWidth, 2));
-  const rowHeights = wrappedUsps.map((lines) => Math.max(iconSize, lines.length * uspLineHeight));
+  // Each USP renders as a single truncated line so the panel stays compact
+  // regardless of how much text a recruiter (or the AI) puts in it.
+  const uspLines = data.usps.map((usp) => truncateToWidth(context, usp.trim().replace(/\s+/g, " "), textWidth));
+  const rowHeights = uspLines.map(() => Math.max(iconSize, uspLineHeight));
   const panelHeight = innerPad * 2 + rowHeights.reduce((sum, h) => sum + h, 0) + rowGap * (rowHeights.length - 1);
 
-  return { panelX, panelWidth, panelHeight, innerPad, iconSize, uspFontSize, uspLineHeight, rowGap, wrappedUsps, rowHeights };
+  return { panelX, panelWidth, panelHeight, innerPad, iconSize, uspFontSize, uspLineHeight, rowGap, uspLines, rowHeights };
 }
 
 function drawTriangleBadge(context: CanvasRenderingContext2D, x: number, y: number, size: number) {
@@ -191,15 +207,13 @@ function drawUspPanelAt(context: CanvasRenderingContext2D, metrics: UspPanelMetr
   let rowY = top + metrics.innerPad;
   context.textAlign = "left";
   context.fillStyle = "#ffffff";
-  metrics.wrappedUsps.forEach((lines, index) => {
+  metrics.uspLines.forEach((line, index) => {
     drawTriangleBadge(context, metrics.panelX + metrics.innerPad, rowY, metrics.iconSize);
     context.font = `700 ${metrics.uspFontSize}px ${HEADLINE_FONT}`;
-    context.textBaseline = "top";
+    context.textBaseline = "middle";
     const textX = metrics.panelX + metrics.innerPad + metrics.iconSize + Math.round(metrics.innerPad * 0.6);
     const rowHeight = metrics.rowHeights[index];
-    const textStartY = rowY + (rowHeight - lines.length * metrics.uspLineHeight) / 2;
-    const textWidth = metrics.panelWidth - metrics.innerPad * 2 - metrics.iconSize - Math.round(metrics.innerPad * 0.6);
-    lines.forEach((line, lineIndex) => context.fillText(line, textX, textStartY + lineIndex * metrics.uspLineHeight, textWidth));
+    context.fillText(line, textX, rowY + rowHeight / 2 + 1);
     rowY += rowHeight + metrics.rowGap;
   });
 }

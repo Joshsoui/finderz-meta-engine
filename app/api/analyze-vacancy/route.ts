@@ -31,7 +31,7 @@ async function createAiPlan(input: VacancyInput): Promise<AiCampaignPlan | null>
         "Je bent senior performance marketeer voor Finderz Keeperz.",
         "Maak Nederlandse Meta-wervingscopy die concreet, geloofwaardig en scanbaar is.",
         "Benoem nooit de klantnaam tenzij die letterlijk als werkgever in de input staat.",
-        "Kies exact drie harde USP's uit de vacature; verzin geen arbeidsvoorwaarden.",
+        "Kies exact drie harde USP's uit de vacature; verzin geen arbeidsvoorwaarden. Elke USP is een korte bullet van maximaal circa 28 tekens (bijvoorbeeld '€ 4.500 bruto p/m' of 'Auto van de zaak'), geen volledige zin en geen herhaling van de functietitel of locatie.",
         "De kop is een korte, pakkende vraag die de kandidaat direct aanspreekt (bijvoorbeeld 'Toe aan een nieuwe uitdaging als monteur?'), geen letterlijke functietitel en geen leestekens als | of :. Maximaal 70 tekens.",
         "De primaire tekst is maximaal 420 tekens en de beschrijving maximaal 35 tekens.",
         "De beeldbriefing beschrijft alleen een realistische fotografische achtergrond zonder tekst, logo of grafische elementen.",
