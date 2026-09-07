@@ -10,6 +10,7 @@ import {
   TrendingUp, Users, Zap, LoaderCircle,
 } from "lucide-react";
 import { AppShell, FinderzMark } from "@/components/app-shell";
+import { CreativePreview } from "@/components/creative-preview";
 import { NewCampaignSheet } from "@/components/new-campaign-sheet";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -33,41 +34,6 @@ const euro = new Intl.NumberFormat("nl-NL", {
   currency: "EUR",
   maximumFractionDigits: 0,
 });
-
-function CreativePreview({ campaign, format }: { campaign: Campaign; format: CreativeFormat }) {
-  const ratio = format === "1:1" ? "1 / 1" : format === "1.91:1" ? "1.91 / 1" : "9 / 16";
-  return (
-    <div className="creative-shell" style={{ aspectRatio: ratio }}>
-      <div
-        className={"creative-bg" + (campaign.backgroundImage ? "" : " creative-bg-fallback")}
-        style={campaign.backgroundImage ? { backgroundImage: `url(${campaign.backgroundImage})` } : undefined}
-      />
-      <div className="creative-top-scrim" />
-      <div className="creative-content">
-        <div className="creative-logo">
-          <div className="creative-logo-badge">
-            {campaign.logoImage ? <img src={campaign.logoImage} alt="Finderz Keeperz" /> : <FinderzMark />}
-          </div>
-        </div>
-        <h3 className="creative-headline">{campaign.headline}</h3>
-        <div className="creative-bottom">
-          <div className="creative-title-banner">
-            <div className="creative-title-banner-job">{campaign.title}</div>
-            <div className="creative-title-banner-location">{campaign.location}</div>
-          </div>
-          <div className="creative-chip-row">
-            {campaign.usps.map((usp) => (
-              <div className="creative-chip" key={usp}>
-                <div className="creative-chip-value">{usp}</div>
-              </div>
-            ))}
-          </div>
-          <div className="creative-cta-pill">SOLLICITEER NU</div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function TrendChart() {
   const points = "2,89 48,75 94,78 140,57 186,61 232,38 278,45 324,28 370,33 416,18 462,23 508,12";
@@ -619,7 +585,7 @@ export default function Home() {
               <article className="panel p-5">
                 <div className="flex items-center justify-between"><div><div className="eyebrow"><Clock3 className="size-3.5" />24/7 monitoring</div><h2 className="mt-2">Recente acties</h2></div><span className="live-pulse"><span />Live</span></div>
                 <div className="mt-5 space-y-5">{activityFeed.map((item) => <div className="activity-item" key={item.title}><div className={"activity-dot activity-" + item.tone} /><div className="min-w-0"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-semibold text-[#d7e2e8]">{item.title}</p><span className="shrink-0 text-[11px] text-[#526f82]">{item.time}</span></div><p className="mt-1 text-xs leading-5 text-[#6f8798]">{item.detail}</p></div></div>)}</div>
-                <button className="secondary-button mt-5 w-full justify-center" onClick={() => toast.info("Alle beslisregels zijn actief in de sandbox.")}><BarChart3 className="size-4" />Bekijk beslisregels</button>
+                <Link href="/automatisering" className="secondary-button mt-5 w-full justify-center"><BarChart3 className="size-4" />Bekijk beslisregels</Link>
               </article>
 
               <article className="panel overflow-hidden">

@@ -17,9 +17,9 @@ export type NavKey = "overzicht" | "pipeline" | "creatives" | "optimalisaties" |
 const NAV_ITEMS: Array<{ key: NavKey; label: string; icon: typeof LayoutDashboard; href?: string; badge?: string }> = [
   { key: "overzicht", label: "Overzicht", icon: LayoutDashboard, href: "/" },
   { key: "pipeline", label: "Pipeline", icon: Megaphone, href: "/pipeline" },
-  { key: "creatives", label: "Creatives", icon: ImageIcon },
-  { key: "optimalisaties", label: "Optimalisaties", icon: BrainCircuit, badge: "3" },
-  { key: "automatisering", label: "Automatisering", icon: Zap },
+  { key: "creatives", label: "Creatives", icon: ImageIcon, href: "/creatives" },
+  { key: "optimalisaties", label: "Optimalisaties", icon: BrainCircuit, href: "/optimalisaties" },
+  { key: "automatisering", label: "Automatisering", icon: Zap, href: "/automatisering" },
 ];
 
 export function FinderzMark({ compact = false }: { compact?: boolean }) {
