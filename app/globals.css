@@ -211,17 +211,17 @@ button { cursor: pointer; }
 }
 .creative-chip-row { display: flex; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; gap: 1.4cqmin; margin-top: 2.2cqmin; }
 .creative-chip {
-  border-radius: 1.4cqmin; background: rgba(103,153,156,.92); padding: 1.7cqmin;
+  border-radius: 1.8cqmin; background: rgba(103,153,156,.92); padding: 2cqmin;
   box-shadow: 0 1px 4px rgba(0,8,14,.35);
 }
-.creative-chip-hero { display: flex; flex-direction: column; gap: .6cqmin; padding: 2cqmin; }
+.creative-chip-hero { display: flex; flex-direction: column; gap: .6cqmin; }
 .creative-chip-label {
   color: #ffffff; font-family: "Plus Jakarta Sans", Arial, sans-serif;
   font-size: clamp(.45rem,1.8cqmin,.75rem); font-weight: 800; letter-spacing: .04em;
 }
 .creative-chip-value {
   overflow: hidden; max-width: 40cqw; color: #ffffff; font-family: "Plus Jakarta Sans", Arial, sans-serif;
-  font-size: clamp(.55rem,2.5cqmin,1rem); font-weight: 700; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis;
+  font-size: clamp(.65rem,3cqmin,1.15rem); font-weight: 800; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis;
 }
 .creative-chip-value-hero { max-width: 70cqw; font-size: clamp(.8rem,3.8cqmin,1.6rem); font-weight: 800; }
 .creative-cta-pill {

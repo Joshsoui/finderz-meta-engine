@@ -201,7 +201,10 @@ type Chip = {
 };
 
 function measureChip(context: CanvasRenderingContext2D, text: string, base: number, hero: boolean, maxTextWidth: number): Chip {
-  const pad = Math.round(base * (hero ? 0.02 : 0.017));
+  // Every USP gets the same card treatment as the reference's "SALARIS" card
+  // (bold value, generous padding) -- not a thin pill -- the hero one is just
+  // bigger and carries a caption, since salary is the strongest hook.
+  const pad = Math.round(base * 0.02);
   let value = text.trim().replace(/\s+/g, " ");
 
   if (hero) {
@@ -220,8 +223,8 @@ function measureChip(context: CanvasRenderingContext2D, text: string, base: numb
     };
   }
 
-  const valueSize = Math.round(Math.max(15, base * 0.025));
-  context.font = `700 ${valueSize}px ${HEADLINE_FONT}`;
+  const valueSize = Math.round(Math.max(18, base * 0.03));
+  context.font = `800 ${valueSize}px ${HEADLINE_FONT}`;
   value = truncateToWidth(context, value, maxTextWidth);
   const valueWidth = context.measureText(value).width;
   return { width: Math.round(valueWidth + pad * 2), height: pad * 2 + valueSize, pad, value, valueSize };
@@ -229,7 +232,7 @@ function measureChip(context: CanvasRenderingContext2D, text: string, base: numb
 
 function drawChip(context: CanvasRenderingContext2D, chip: Chip, base: number, x: number, y: number) {
   context.fillStyle = "rgba(103,153,156,0.92)"; // Finderz Keeperz brand groenblauw #67999C
-  roundRectPath(context, x, y, chip.width, chip.height, Math.round(base * 0.014));
+  roundRectPath(context, x, y, chip.width, chip.height, Math.round(base * 0.018));
   context.fill();
 
   context.textAlign = "left";
@@ -245,7 +248,7 @@ function drawChip(context: CanvasRenderingContext2D, chip: Chip, base: number, x
     context.font = `800 ${chip.valueSize}px ${HEADLINE_FONT}`;
     context.fillText(chip.value, x + chip.pad, y + chip.pad + chip.labelSize + chip.labelGap);
   } else {
-    context.font = `700 ${chip.valueSize}px ${HEADLINE_FONT}`;
+    context.font = `800 ${chip.valueSize}px ${HEADLINE_FONT}`;
     context.fillText(chip.value, x + chip.pad, y + chip.pad);
   }
 
