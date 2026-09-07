@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
 
 @utility scrollbar-thin {
   scrollbar-width: thin;
@@ -192,14 +192,14 @@ button { cursor: pointer; }
 .creative-logo-badge img { display: block; width: auto; height: auto; max-width: 100%; max-height: 4.6cqmin; object-fit: contain; }
 .creative-headline {
   display: -webkit-box; flex-shrink: 0; margin-top: 1.5cqmin; max-width: 88cqw; overflow: hidden; color: white;
-  font-family: "Baloo 2", Arial, sans-serif; font-size: clamp(.85rem,4.6cqmin,2.1rem); font-weight: 800;
+  font-family: "Plus Jakarta Sans", Arial, sans-serif; font-size: clamp(.85rem,4.6cqmin,2.1rem); font-weight: 800;
   line-height: 1.1; letter-spacing: -.01em; text-shadow: 0 2px 10px rgba(0,8,14,.4);
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .creative-bottom { flex-shrink: 0; margin-top: auto; }
 .creative-title-banner { margin: 0 -5.5cqw; background: #0d6fa3; padding: 2.8cqmin 5.5cqw; }
-.creative-title-banner-job { font-family: "Baloo 2", Arial, sans-serif; color: white; font-size: clamp(.7rem,4.8cqmin,1.7rem); font-weight: 800; line-height: 1.15; }
-.creative-title-banner-location { margin-top: .8cqmin; color: rgba(255,255,255,.92); font-family: "Baloo 2", Arial, sans-serif; font-size: clamp(.55rem,2.7cqmin,1.05rem); font-weight: 600; }
+.creative-title-banner-job { font-family: "Plus Jakarta Sans", Arial, sans-serif; color: white; font-size: clamp(.7rem,4.8cqmin,1.7rem); font-weight: 800; line-height: 1.15; }
+.creative-title-banner-location { margin-top: .8cqmin; color: rgba(255,255,255,.92); font-family: "Plus Jakarta Sans", Arial, sans-serif; font-size: clamp(.55rem,2.7cqmin,1.05rem); font-weight: 600; }
 .creative-usp-panel {
   align-self: flex-end; width: 62%; margin-top: 2.2cqmin; border-radius: 1.8cqmin; background: rgba(103,153,156,.55);
   padding: 2.2cqmin; display: flex; flex-direction: column; gap: 1.8cqmin;
@@ -210,12 +210,12 @@ button { cursor: pointer; }
   border-radius: 999px; background: rgba(255,255,255,.18); color: white;
 }
 .creative-usp-row span:last-child {
-  display: block; min-width: 0; overflow: hidden; color: white; font-family: "Baloo 2", Arial, sans-serif;
+  display: block; min-width: 0; overflow: hidden; color: white; font-family: "Plus Jakarta Sans", Arial, sans-serif;
   font-size: clamp(.55rem,2.3cqmin,1rem); font-weight: 700; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis;
 }
 .creative-cta-pill {
   align-self: center; flex-shrink: 0; margin-top: 2.2cqmin; border-radius: 999px; background: #0a3d5c;
-  padding: 2cqmin 4.5cqw; color: white; font-family: "Baloo 2", Arial, sans-serif; font-size: clamp(.55rem,2.6cqmin,1rem); font-weight: 800; letter-spacing: .03em;
+  padding: 2cqmin 4.5cqw; color: white; font-family: "Plus Jakarta Sans", Arial, sans-serif; font-size: clamp(.55rem,2.6cqmin,1rem); font-weight: 800; letter-spacing: .03em;
 }
 .content-label { display: block; margin-bottom: .5rem; color: #698597; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .content-box { border: 1px solid rgba(255,255,255,.08); border-radius: .75rem; background: rgba(255,255,255,.025); padding: .9rem; color: #c3d1d9; font-size: .85rem; line-height: 1.65; }

@@ -16,7 +16,7 @@ export type CreativeData = {
   logoImage?: string;
 };
 
-const HEADLINE_FONT = '"Baloo 2", Arial, sans-serif';
+const HEADLINE_FONT = '"Plus Jakarta Sans", Arial, sans-serif';
 const CTA_TEXT = "SOLLICITEER NU";
 
 async function ensureFontsLoaded() {
@@ -29,7 +29,7 @@ async function ensureFontsLoaded() {
     ]);
     await document.fonts.ready;
   } catch {
-    // Baloo 2 could not be loaded; canvas text falls back to Arial.
+    // Plus Jakarta Sans could not be loaded; canvas text falls back to Arial.
   }
 }
 
