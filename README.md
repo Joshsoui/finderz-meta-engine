@@ -17,6 +17,7 @@ Meta-only recruitment campaign control voor Finderz Keeperz.
   - gecontroleerd opschalen met maximaal 15% bij gezonde CPL.
 - API-routes voor vacatureanalyse, campagneopslag, Meta-status en campagne-evaluatie.
 - D1-datamodel voor campagnes, metric snapshots en optimalisatieacties.
+- Gegenereerde achtergronden worden duurzaam opgeslagen in een R2-bucket (via `/media/...`).
 
 ## API
 
@@ -32,24 +33,54 @@ Voer npm ci en daarna npm run dev uit.
 
 Kopieer .env.example naar .env.local voor echte koppelingen. Plaats nooit tokens in Git.
 
-## Render
+## Cloudflare Workers
 
-De repository bevat een render.yaml Blueprint voor een Node web service in Frankfurt.
-De Blueprint gebruikt voorlopig het gratis prototypeplan, bouwt met npm install en npm run build,
-start met npm start en controleert de service via /api/meta/status.
+De app draait als standalone Cloudflare Worker (vinext + `@cloudflare/vite-plugin`), met een
+D1-database voor campagnedata en een R2-bucket voor gegenereerde achtergronden/logo's.
+Configuratie staat in `wrangler.jsonc`.
 
-Meta- en OpenAI-sleutels worden bewust niet in render.yaml opgeslagen. Voeg deze als
-secret environment variables toe wanneer de echte koppelingen worden geactiveerd:
-META_ACCESS_TOKEN, META_AD_ACCOUNT_ID, META_PAGE_ID, META_PIXEL_ID en OPENAI_API_KEY.
-De optionele modelinstellingen zijn OPENAI_TEXT_MODEL en OPENAI_IMAGE_MODEL.
+Eenmalig opzetten (als het account nog geen D1-database/R2-bucket/workers.dev-subdomain heeft):
+
+```
+npx wrangler login
+npx wrangler d1 create finderz-meta-engine-db      # database_id in wrangler.jsonc zetten
+npx wrangler r2 bucket create finderz-meta-engine-media
+```
+
+Migraties toepassen op de live database:
+
+```
+npx drizzle-kit generate
+npx wrangler d1 migrations apply finderz-meta-engine-db --remote
+```
+
+Secrets toevoegen (nooit in git of wrangler.jsonc):
+
+```
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put META_ACCESS_TOKEN
+npx wrangler secret put META_AD_ACCOUNT_ID
+npx wrangler secret put META_PAGE_ID
+npx wrangler secret put META_PIXEL_ID
+```
+
+Deployen:
+
+```
+npm run deploy
+```
+
+`OPENAI_TEXT_MODEL` en `OPENAI_IMAGE_MODEL` zijn optioneel (vallen terug op respectievelijk
+`gpt-5-mini` en `gpt-image-2`); zet ze als losse `vars` in `wrangler.jsonc` als je een ander model wilt.
 
 ## Productievolgorde
 
 1. Meta-advertentieaccount en Facebookpagina koppelen.
 2. Bestaande Meta Lead Forms uitlezen en bij nieuwe campagnes kunnen selecteren.
-3. Gegenereerde achtergronden duurzaam opslaan in object storage.
-4. Campagnes vanuit het dashboard publiceren in een controlemodus.
-5. Monitoring elke 15 minuten laten draaien; automatische wijzigingen eerst loggen en begrenzen.
-6. Leadkwaliteit terugvoeren, zodat niet alleen op goedkope maar op bruikbare leads wordt geoptimaliseerd.
+3. Dashboard laten praten met /api/campaigns (laden + opslaan) in plaats van lokale mock-data.
+4. Authenticatie voor dashboard en API-routes.
+5. Campagnes vanuit het dashboard publiceren in een controlemodus.
+6. Monitoring elke 15 minuten laten draaien (cron trigger); automatische wijzigingen eerst loggen en begrenzen.
+7. Leadkwaliteit terugvoeren, zodat niet alleen op goedkope maar op bruikbare leads wordt geoptimaliseerd.
 
 OTYS en LinkedIn vallen bewust buiten deze versie.

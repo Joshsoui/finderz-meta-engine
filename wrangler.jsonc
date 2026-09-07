@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "finderz-meta-engine",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker/index.ts",
+  "account_id": "db40d46d6a72c39f89b62a6829ea9eee",
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "finderz-meta-engine-db",
+      "database_id": "35860251-2b51-4824-ad4b-ce8f082e3309",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "finderz-meta-engine-media"
+    }
+  ]
+}

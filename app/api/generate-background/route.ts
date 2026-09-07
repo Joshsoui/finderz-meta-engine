@@ -1,3 +1,5 @@
+import { uploadMedia } from "@/lib/storage";
+
 type GenerateBackgroundInput = {
   prompt?: string;
   title?: string;
@@ -66,8 +68,12 @@ export async function POST(request: Request) {
       );
     }
 
+    const bytes = Uint8Array.from(atob(result.data[0].b64_json), (char) => char.charCodeAt(0));
+    const key = `backgrounds/${crypto.randomUUID()}.jpg`;
+    const image = await uploadMedia(key, bytes.buffer, "image/jpeg");
+
     return Response.json({
-      image: `data:image/jpeg;base64,${result.data[0].b64_json}`,
+      image,
       model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
     });
   } catch (error) {

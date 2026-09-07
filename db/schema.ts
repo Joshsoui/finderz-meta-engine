@@ -19,6 +19,8 @@ export const campaigns = sqliteTable(
     descriptionText: text("description_text").notNull(),
     uspsJson: text("usps_json").notNull(),
     creativePrompt: text("creative_prompt").notNull(),
+    backgroundImageUrl: text("background_image_url"),
+    logoImageUrl: text("logo_image_url"),
     metaCampaignId: text("meta_campaign_id"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
