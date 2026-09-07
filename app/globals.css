@@ -173,13 +173,14 @@ button { cursor: pointer; }
     linear-gradient(150deg,#1f536e,#122b41 55%,#194964);
   background-position: center; background-size: cover;
 }
-.creative-bg::after {
+.creative-bg-fallback::after {
   content: ""; position: absolute; inset: 12% -30% auto 35%; height: 50%; transform: rotate(-18deg);
   border: 1px solid rgba(110,211,236,.18); background: linear-gradient(90deg,transparent,rgba(82,183,212,.12));
 }
 .creative-shade { position: absolute; inset: 0; background: linear-gradient(to top,rgba(1,12,19,.97) 12%,rgba(1,12,19,.45) 62%,rgba(1,12,19,.2)); }
 .creative-content { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; padding: 1.2rem; }
 .creative-logo { display: flex; justify-content: flex-end; }
+.creative-logo-badge { display: flex; align-items: center; border-radius: .6rem; background: rgba(1,12,19,.55); padding: .4rem .6rem; }
 .creative-logo img { display: block; width: auto; max-width: 42%; height: auto; max-height: 3rem; object-fit: contain; }
 .creative-location {
   display: inline-flex; margin-bottom: .55rem; border-radius: 999px; background: rgba(84,188,216,.16);

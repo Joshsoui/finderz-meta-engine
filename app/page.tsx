@@ -39,13 +39,15 @@ function CreativePreview({ campaign, format }: { campaign: Campaign; format: Cre
   return (
     <div className="creative-shell" style={{ aspectRatio: ratio }}>
       <div
-        className="creative-bg"
+        className={"creative-bg" + (campaign.backgroundImage ? "" : " creative-bg-fallback")}
         style={campaign.backgroundImage ? { backgroundImage: `url(${campaign.backgroundImage})` } : undefined}
       />
       <div className="creative-shade" />
       <div className="creative-content">
         <div className="creative-logo">
-          {campaign.logoImage ? <img src={campaign.logoImage} alt="Finderz Keeperz" /> : <FinderzMark />}
+          <div className="creative-logo-badge">
+            {campaign.logoImage ? <img src={campaign.logoImage} alt="Finderz Keeperz" /> : <FinderzMark />}
+          </div>
         </div>
         <div className="mt-auto">
           <div className="creative-location">{campaign.location}</div>

@@ -72,7 +72,7 @@ export function generateCampaign(input: VacancyInput) {
         input.title.trim().toLowerCase() +
         " tijdens het werk in " +
         input.location.trim() +
-        ". Natuurlijk licht, geloofwaardige Nederlandse werkomgeving, volwassen professionele uitstraling, ruimte links voor tekst. Geen logo, letters, watermerk of AI-achtige vervorming.",
+        ". Natuurlijk licht, geloofwaardige Nederlandse werkomgeving, volwassen professionele uitstraling, medewerker centraal en volledig in beeld. Geen logo, letters, watermerk of AI-achtige vervorming.",
       overlay: {
         logo: "Finderz Keeperz linksboven",
         title: input.title.trim(),

@@ -79,6 +79,15 @@ async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, w
     const scale = Math.min(maxWidth / logo.naturalWidth, maxHeight / logo.naturalHeight);
     const drawWidth = logo.naturalWidth * scale;
     const drawHeight = logo.naturalHeight * scale;
+    const badgePad = Math.round(pad * 0.4);
+    const badgeX = width - pad - drawWidth - badgePad;
+    const badgeY = pad - badgePad;
+
+    // A dark badge behind the logo keeps it legible against any background photo.
+    context.fillStyle = "rgba(1,12,19,0.55)";
+    roundRect(context, badgeX, badgeY, drawWidth + badgePad * 2, drawHeight + badgePad * 2, badgePad);
+    context.fill();
+
     context.drawImage(logo, width - pad - drawWidth, pad, drawWidth, drawHeight);
   } catch {
     // No logo could be loaded; leave the corner empty rather than fail the export.
