@@ -56,16 +56,11 @@ function CreativePreview({ campaign, format }: { campaign: Campaign; format: Cre
             <div className="creative-title-banner-location">{campaign.location}</div>
           </div>
           <div className="creative-chip-row">
-            <div className="creative-chip creative-chip-hero">
-              <div className="creative-chip-label">SALARIS</div>
-              <div className="creative-chip-value creative-chip-value-hero">{campaign.usps[0]}</div>
-            </div>
-            <div className="creative-chip">
-              <div className="creative-chip-value">{campaign.usps[1]}</div>
-            </div>
-            <div className="creative-chip">
-              <div className="creative-chip-value">{campaign.usps[2]}</div>
-            </div>
+            {campaign.usps.map((usp) => (
+              <div className="creative-chip" key={usp}>
+                <div className="creative-chip-value">{usp}</div>
+              </div>
+            ))}
           </div>
           <div className="creative-cta-pill">SOLLICITEER NU</div>
         </div>

@@ -19,7 +19,6 @@ export type CreativeData = {
 
 const HEADLINE_FONT = '"Plus Jakarta Sans", Arial, sans-serif';
 const CTA_TEXT = "SOLLICITEER NU";
-const STAT_LABEL = "SALARIS";
 
 async function ensureFontsLoaded() {
   if (typeof document === "undefined" || !("fonts" in document)) return;
@@ -190,42 +189,17 @@ function drawBannerAt(context: CanvasRenderingContext2D, data: CreativeData, pad
   );
 }
 
-// --- USP chips: one small card per USP, each sized to its own text, wrapped
-// left-to-right and right-aligned per row. The first is always salary and
-// gets a "SALARIS" caption + bigger value; the other two are plain chips. ---
+// --- USP chips: one identical card per USP, each sized to its own text,
+// stacked vertically and right-aligned -- no special treatment for any one
+// of them. ---
 
-type Chip = {
-  width: number; height: number; pad: number;
-  label?: string; labelSize?: number; labelGap?: number;
-  value: string; valueSize: number;
-};
+type Chip = { width: number; height: number; pad: number; value: string; valueSize: number };
 
-function measureChip(context: CanvasRenderingContext2D, text: string, base: number, hero: boolean, maxTextWidth: number): Chip {
-  // Every USP gets the same card treatment as the reference's "SALARIS" card
-  // (bold value, generous padding) -- not a thin pill -- the hero one is just
-  // bigger and carries a caption, since salary is the strongest hook.
+function measureChip(context: CanvasRenderingContext2D, text: string, base: number, maxTextWidth: number): Chip {
   const pad = Math.round(base * 0.02);
-  let value = text.trim().replace(/\s+/g, " ");
-
-  if (hero) {
-    const labelSize = Math.round(Math.max(11, base * 0.018));
-    const valueSize = Math.round(Math.max(20, base * 0.038));
-    const labelGap = Math.round(base * 0.006);
-    context.font = `800 ${labelSize}px ${HEADLINE_FONT}`;
-    const labelWidth = context.measureText(STAT_LABEL).width;
-    context.font = `800 ${valueSize}px ${HEADLINE_FONT}`;
-    value = truncateToWidth(context, value, maxTextWidth);
-    const valueWidth = context.measureText(value).width;
-    return {
-      width: Math.round(Math.max(labelWidth, valueWidth) + pad * 2),
-      height: pad * 2 + labelSize + labelGap + valueSize,
-      pad, label: STAT_LABEL, labelSize, labelGap, value, valueSize,
-    };
-  }
-
   const valueSize = Math.round(Math.max(18, base * 0.03));
   context.font = `800 ${valueSize}px ${HEADLINE_FONT}`;
-  value = truncateToWidth(context, value, maxTextWidth);
+  const value = truncateToWidth(context, text.trim().replace(/\s+/g, " "), maxTextWidth);
   const valueWidth = context.measureText(value).width;
   return { width: Math.round(valueWidth + pad * 2), height: pad * 2 + valueSize, pad, value, valueSize };
 }
@@ -241,64 +215,28 @@ function drawChip(context: CanvasRenderingContext2D, chip: Chip, base: number, x
   context.shadowBlur = Math.round(base * 0.006);
   context.shadowOffsetY = 1;
   context.fillStyle = "#ffffff";
-
-  if (chip.label && chip.labelSize && chip.labelGap !== undefined) {
-    context.font = `800 ${chip.labelSize}px ${HEADLINE_FONT}`;
-    context.fillText(chip.label, x + chip.pad, y + chip.pad);
-    context.font = `800 ${chip.valueSize}px ${HEADLINE_FONT}`;
-    context.fillText(chip.value, x + chip.pad, y + chip.pad + chip.labelSize + chip.labelGap);
-  } else {
-    context.font = `800 ${chip.valueSize}px ${HEADLINE_FONT}`;
-    context.fillText(chip.value, x + chip.pad, y + chip.pad);
-  }
-
+  context.font = `800 ${chip.valueSize}px ${HEADLINE_FONT}`;
+  context.fillText(chip.value, x + chip.pad, y + chip.pad);
   context.shadowColor = "transparent";
   context.shadowBlur = 0;
   context.shadowOffsetY = 0;
 }
 
-type ChipRow = { chips: Chip[]; rowWidth: number; rowHeight: number };
-type ChipsBlockMetrics = { rows: ChipRow[]; totalHeight: number; rowGap: number; chipGap: number };
+type ChipsBlockMetrics = { chips: Chip[]; totalHeight: number; rowGap: number };
 
 function measureChipsBlock(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number): ChipsBlockMetrics {
-  const maxRowWidth = width - pad * 2;
-  const chips = [
-    measureChip(context, data.usps[0], base, true, maxRowWidth * 0.85),
-    measureChip(context, data.usps[1], base, false, maxRowWidth * 0.55),
-    measureChip(context, data.usps[2], base, false, maxRowWidth * 0.55),
-  ];
-  const chipGap = Math.round(base * 0.014);
-  const rowGap = Math.round(base * 0.012);
-
-  const rows: ChipRow[] = [];
-  let current: Chip[] = [];
-  let currentWidth = 0;
-  for (const chip of chips) {
-    const nextWidth = currentWidth + (current.length ? chipGap : 0) + chip.width;
-    if (current.length && nextWidth > maxRowWidth) {
-      rows.push({ chips: current, rowWidth: currentWidth, rowHeight: Math.max(...current.map((c) => c.height)) });
-      current = [chip];
-      currentWidth = chip.width;
-    } else {
-      current.push(chip);
-      currentWidth = nextWidth;
-    }
-  }
-  if (current.length) rows.push({ chips: current, rowWidth: currentWidth, rowHeight: Math.max(...current.map((c) => c.height)) });
-
-  const totalHeight = rows.reduce((sum, row) => sum + row.rowHeight, 0) + rowGap * Math.max(0, rows.length - 1);
-  return { rows, totalHeight, rowGap, chipGap };
+  const maxTextWidth = (width - pad * 2) * 0.62;
+  const chips = data.usps.map((usp) => measureChip(context, usp, base, maxTextWidth));
+  const rowGap = Math.round(base * 0.014);
+  const totalHeight = chips.reduce((sum, chip) => sum + chip.height, 0) + rowGap * (chips.length - 1);
+  return { chips, totalHeight, rowGap };
 }
 
 function drawChipsBlockAt(context: CanvasRenderingContext2D, metrics: ChipsBlockMetrics, base: number, width: number, pad: number, top: number) {
-  let rowY = top;
-  metrics.rows.forEach((row) => {
-    let x = width - pad - row.rowWidth;
-    row.chips.forEach((chip) => {
-      drawChip(context, chip, base, x, rowY);
-      x += chip.width + metrics.chipGap;
-    });
-    rowY += row.rowHeight + metrics.rowGap;
+  let y = top;
+  metrics.chips.forEach((chip) => {
+    drawChip(context, chip, base, width - pad - chip.width, y);
+    y += chip.height + metrics.rowGap;
   });
 }
 
