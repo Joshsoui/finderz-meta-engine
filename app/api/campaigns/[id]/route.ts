@@ -16,6 +16,7 @@ type UpdateCampaignInput = {
   usps?: [string, string, string];
   backgroundImageUrl?: string;
   logoImageUrl?: string;
+  finalCreativeImageUrl?: string;
   qualityLeads?: number;
   metaCampaignId?: string;
 };
@@ -38,6 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.usps && input.usps.length === 3) update.uspsJson = JSON.stringify(input.usps);
     if (input.backgroundImageUrl) update.backgroundImageUrl = input.backgroundImageUrl;
     if (input.logoImageUrl) update.logoImageUrl = input.logoImageUrl;
+    if (input.finalCreativeImageUrl) update.finalCreativeImageUrl = input.finalCreativeImageUrl;
     if (Number.isFinite(input.qualityLeads)) update.qualityLeads = Math.max(0, Math.round(input.qualityLeads!));
     if (input.metaCampaignId) update.metaCampaignId = input.metaCampaignId;
 
@@ -49,12 +51,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (credentials && update.status === "live" && !existing.metaCampaignId) {
       // Going live for the first time: build the real Meta campaign (created
       // paused, per lib/meta-client.ts's safety default) and store its id so
-      // insights polling and later pause/budget changes can reach it. A real
-      // ad needs a real image, so require one rather than silently creating
-      // a broken ad or letting the campaign go "live" locally with nothing
-      // backing it.
-      if (!existing.backgroundImageUrl) {
-        return Response.json({ error: "Genereer eerst een AI-achtergrond voordat je live gaat" }, { status: 400 });
+      // insights polling and later pause/budget changes can reach it. Meta
+      // gets the fully branded creative (logo, title banner, USPs, CTA baked
+      // in by the client via lib/creative-renderer.ts and uploaded just
+      // before this request), never the bare AI background photo -- that
+      // upload is required here rather than falling back silently.
+      const finalCreativeImageUrl = update.finalCreativeImageUrl ?? existing.finalCreativeImageUrl;
+      if (!finalCreativeImageUrl) {
+        return Response.json({ error: "Genereer eerst de advertentie-creative voordat je live gaat" }, { status: 400 });
       }
       const origin = new URL(request.url).origin;
       const { metaCampaignId, metaLeadFormId } = await createMetaCampaign({
@@ -64,7 +68,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         primaryText: update.primaryText ?? existing.primaryText,
         headline: update.headline ?? existing.headline,
         description: update.descriptionText ?? existing.descriptionText,
-        imageUrl: `${origin}${existing.backgroundImageUrl}`,
+        imageUrl: finalCreativeImageUrl.startsWith("http") ? finalCreativeImageUrl : `${origin}${finalCreativeImageUrl}`,
       });
       update.metaCampaignId = metaCampaignId;
       update.metaLeadFormId = metaLeadFormId;

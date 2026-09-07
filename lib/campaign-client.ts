@@ -18,6 +18,7 @@ export type CampaignRow = {
   creativePrompt: string;
   backgroundImageUrl: string | null;
   logoImageUrl: string | null;
+  finalCreativeImageUrl: string | null;
 };
 
 export type Campaign = {
@@ -41,6 +42,7 @@ export type Campaign = {
   backgroundPrompt?: string;
   backgroundImage?: string;
   logoImage?: string;
+  finalCreativeImage?: string;
   recommendation: string;
   nextAction: string;
 };
@@ -91,6 +93,7 @@ export function rowToCampaign(row: CampaignRow): Campaign {
     backgroundPrompt: row.creativePrompt,
     backgroundImage: row.backgroundImageUrl ?? undefined,
     logoImage: row.logoImageUrl ?? undefined,
+    finalCreativeImage: row.finalCreativeImageUrl ?? undefined,
     recommendation,
     nextAction,
   };

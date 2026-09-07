@@ -1,0 +1,1 @@
+ALTER TABLE `campaigns` ADD `final_creative_image_url` text;

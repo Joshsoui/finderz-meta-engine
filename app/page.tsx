@@ -24,7 +24,7 @@ import {
   type Campaign, type CampaignRow, rowToCampaign, statusLabel,
 } from "@/lib/campaign-client";
 import {
-  CREATIVE_DIMENSIONS, downloadCreative, type CreativeFormat,
+  CREATIVE_DIMENSIONS, downloadCreative, renderCreative, type CreativeFormat,
 } from "@/lib/creative-renderer";
 import { useMetaStatus } from "@/lib/use-meta-status";
 
@@ -178,6 +178,7 @@ function toApiFields(update: Partial<Campaign>): Record<string, unknown> {
   if (update.usps !== undefined) fields.usps = update.usps;
   if (update.backgroundImage !== undefined) fields.backgroundImageUrl = update.backgroundImage;
   if (update.logoImage !== undefined) fields.logoImageUrl = update.logoImage;
+  if (update.finalCreativeImage !== undefined) fields.finalCreativeImageUrl = update.finalCreativeImage;
   return fields;
 }
 
@@ -189,6 +190,7 @@ export default function Home() {
   const [creativeFormat, setCreativeFormat] = useState<CreativeFormat>("1:1");
   const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
   const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const selected = campaigns.find((campaign) => campaign.id === selectedId);
   const totals = useMemo(() => {
     const spend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
@@ -329,6 +331,34 @@ export default function Home() {
       toast.error(error instanceof Error ? error.message : "Tekst genereren is niet gelukt.");
     } finally {
       setIsGeneratingCopy(false);
+    }
+  }
+
+  async function publishCampaign() {
+    if (!selected) return;
+    setIsPublishing(true);
+    try {
+      // Meta needs the fully branded image (logo, title banner, USPs, CTA),
+      // never the bare AI background photo -- bake it once here, right as
+      // the campaign goes live, and store the result so it doesn't need to
+      // be redone on every subsequent status change.
+      const dataUrl = await renderCreative(selected, "1:1");
+      const uploadResponse = await fetch("/api/upload-creative", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl }),
+      });
+      const uploadPayload = await uploadResponse.json() as { url?: string; error?: string };
+      if (!uploadResponse.ok || !uploadPayload.url) throw new Error(uploadPayload.error || "Advertentie-creative kon niet worden geüpload.");
+
+      updateSelected(
+        { status: "live", finalCreativeImage: uploadPayload.url, recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." },
+        "Campagne gestart",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Campagne kon niet live gezet worden.");
+    } finally {
+      setIsPublishing(false);
     }
   }
 
@@ -565,12 +595,13 @@ export default function Home() {
                 <div className="flex items-start justify-between gap-4"><div><div className="eyebrow"><BrainCircuit className="size-3.5" />Automatische analyse</div><h2 className="mt-2">Aanbevolen actie</h2></div><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]"><Zap className="size-5" /></div></div>
                 <div className="mt-5 rounded-xl border border-[#206389] bg-[#13425e] p-4"><p className="text-sm leading-6 text-[#bbced9]">{selected.recommendation}</p></div>
                 {selected.status !== "completed" && (
-                  <button className="primary-button mt-4 w-full justify-center" onClick={() => {
+                  <button className="primary-button mt-4 w-full justify-center disabled:cursor-wait disabled:opacity-60" disabled={isPublishing} onClick={() => {
                     if (selected.status === "paused") updateSelected({ status: "draft", recommendation: "Campagne staat klaar voor een nieuwe creative en teksthoek." }, "Campagne teruggezet naar concept");
-                    else if (selected.status === "draft") updateSelected({ status: "live", recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." }, "Campagne gestart in sandbox");
+                    else if (selected.status === "draft") void publishCampaign();
                     else updateSelected({ maxBudget: Math.round(selected.maxBudget * 1.15) }, "Aanbevolen optimalisatie toegepast");
                   }}>
-                    {selected.status === "paused" ? <RefreshCw className="size-4" /> : selected.status === "draft" ? <Play className="size-4" /> : <ArrowUpRight className="size-4" />}{selected.nextAction}
+                    {isPublishing ? <LoaderCircle className="size-4 animate-spin" /> : selected.status === "paused" ? <RefreshCw className="size-4" /> : selected.status === "draft" ? <Play className="size-4" /> : <ArrowUpRight className="size-4" />}
+                    {isPublishing ? "Creative wordt klaargezet…" : selected.nextAction}
                   </button>
                 )}
                 {selected.status !== "paused" && selected.status !== "completed" && <button className="danger-button mt-2 w-full justify-center" onClick={() => updateSelected({ status: "paused", nextAction: "Herbouw campagne" }, "Campagne gepauzeerd")}><Pause className="size-4" />Campagne pauzeren</button>}
