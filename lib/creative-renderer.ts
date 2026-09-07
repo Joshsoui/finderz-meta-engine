@@ -204,8 +204,11 @@ function measureChip(context: CanvasRenderingContext2D, text: string, base: numb
   return { width: Math.round(valueWidth + pad * 2), height: pad * 2 + valueSize, pad, value, valueSize };
 }
 
-function drawChip(context: CanvasRenderingContext2D, chip: Chip, base: number, x: number, y: number) {
-  context.fillStyle = "rgba(103,153,156,0.92)"; // Finderz Keeperz brand groenblauw #67999C
+// Finderz Keeperz brand colors: groenblauw #67999C and diepblauw #006192.
+const CHIP_COLORS = ["rgba(103,153,156,0.92)", "rgba(0,97,146,0.92)", "rgba(103,153,156,0.92)"];
+
+function drawChip(context: CanvasRenderingContext2D, chip: Chip, base: number, x: number, y: number, color: string) {
+  context.fillStyle = color;
   roundRectPath(context, x, y, chip.width, chip.height, Math.round(base * 0.018));
   context.fill();
 
@@ -234,8 +237,8 @@ function measureChipsBlock(context: CanvasRenderingContext2D, data: CreativeData
 
 function drawChipsBlockAt(context: CanvasRenderingContext2D, metrics: ChipsBlockMetrics, base: number, width: number, pad: number, top: number) {
   let y = top;
-  metrics.chips.forEach((chip) => {
-    drawChip(context, chip, base, width - pad - chip.width, y);
+  metrics.chips.forEach((chip, index) => {
+    drawChip(context, chip, base, width - pad - chip.width, y, CHIP_COLORS[index % CHIP_COLORS.length]);
     y += chip.height + metrics.rowGap;
   });
 }
@@ -255,7 +258,7 @@ function measureCta(context: CanvasRenderingContext2D, base: number): CtaMetrics
 }
 
 function drawCtaAt(context: CanvasRenderingContext2D, pad: number, metrics: CtaMetrics, top: number) {
-  context.fillStyle = "rgba(10,61,92,0.82)";
+  context.fillStyle = "rgba(0,97,146,0.9)"; // Finderz Keeperz brand diepblauw #006192
   roundRectPath(context, pad, top, metrics.width, metrics.height, metrics.height / 2);
   context.fill();
 
