@@ -10,6 +10,7 @@ import {
   SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu,
   SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { useMetaStatus } from "@/lib/use-meta-status";
 import { Toaster, toast } from "sonner";
 
 export type NavKey = "overzicht" | "pipeline" | "creatives" | "optimalisaties" | "automatisering";
@@ -38,6 +39,9 @@ export function AppShell({
   headerActions?: ReactNode;
   children: ReactNode;
 }) {
+  const metaStatus = useMetaStatus();
+  const isConnected = metaStatus.mode === "connected";
+
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon" className="border-r border-white/8 bg-[#0d2b45]">
@@ -100,7 +104,10 @@ export function AppShell({
           <SidebarTrigger className="mr-3 text-[#91aabb] hover:bg-white/5 hover:text-white" />
           <div className="min-w-0"><h1 className="truncate text-lg font-semibold tracking-tight text-white">{title}</h1>{subtitle && <p className="hidden text-xs text-[#6f8798] sm:block">{subtitle}</p>}</div>
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-full border border-[#256184] bg-[#13425e] px-3 py-1.5 text-xs font-semibold text-[#82cbe1] sm:flex"><span className="size-1.5 rounded-full bg-[#35b7df] shadow-[0_0_8px_#35b7df]" />Sandbox actief</div>
+            <div className={"hidden items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold sm:flex " + (isConnected ? "border-[#3f9d5f] bg-[#123a26] text-[#7fd99c]" : "border-[#256184] bg-[#13425e] text-[#82cbe1]")}>
+              <span className={"size-1.5 rounded-full " + (isConnected ? "bg-[#4ade80] shadow-[0_0_8px_#4ade80]" : "bg-[#35b7df] shadow-[0_0_8px_#35b7df]")} />
+              {isConnected ? "Live gekoppeld" : "Sandbox actief"}
+            </div>
             {headerActions}
           </div>
         </header>

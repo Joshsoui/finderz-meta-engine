@@ -26,6 +26,7 @@ import {
 import {
   CREATIVE_DIMENSIONS, downloadCreative, type CreativeFormat,
 } from "@/lib/creative-renderer";
+import { useMetaStatus } from "@/lib/use-meta-status";
 
 const activityFeed: Array<{ time: string; tone: string; title: string; detail: string }> = [];
 
@@ -181,6 +182,7 @@ function toApiFields(update: Partial<Campaign>): Record<string, unknown> {
 }
 
 export default function Home() {
+  const metaStatus = useMetaStatus();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
@@ -589,8 +591,12 @@ export default function Home() {
               </article>
 
               <article className="panel overflow-hidden">
-                <div className="border-b border-white/8 p-5"><div className="flex items-center justify-between"><div><div className="eyebrow"><MousePointerClick className="size-3.5" />Meta-koppeling</div><h2 className="mt-2">Accountstatus</h2></div><AlertTriangle className="size-5 text-[#df9826]" /></div></div>
-                <div className="space-y-3 p-5"><div className="connection-row"><span>Advertentieaccount</span><strong>Nog koppelen</strong></div><div className="connection-row"><span>Lead Forms</span><strong>Nog koppelen</strong></div><div className="connection-row"><span>Automatische acties</span><strong>Sandbox</strong></div></div>
+                <div className="border-b border-white/8 p-5"><div className="flex items-center justify-between"><div><div className="eyebrow"><MousePointerClick className="size-3.5" />Meta-koppeling</div><h2 className="mt-2">Accountstatus</h2></div>{metaStatus.configured ? <CheckCircle2 className="size-5 text-[#4ade80]" /> : <AlertTriangle className="size-5 text-[#df9826]" />}</div></div>
+                <div className="space-y-3 p-5">
+                  <div className="connection-row"><span>Advertentieaccount</span><strong className={metaStatus.services.adsManager ? "text-[#7fd99c]" : undefined}>{metaStatus.services.adsManager ? "Gekoppeld" : "Nog koppelen"}</strong></div>
+                  <div className="connection-row"><span>Lead Forms</span><strong className={metaStatus.services.leadForms ? "text-[#7fd99c]" : undefined}>{metaStatus.services.leadForms ? "Gekoppeld" : "Nog koppelen"}</strong></div>
+                  <div className="connection-row"><span>Automatische acties</span><strong className={metaStatus.mode === "connected" ? "text-[#7fd99c]" : undefined}>{metaStatus.mode === "connected" ? "Live" : "Sandbox"}</strong></div>
+                </div>
               </article>
             </aside>
           </section>
