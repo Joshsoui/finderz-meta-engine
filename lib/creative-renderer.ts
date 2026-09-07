@@ -107,21 +107,31 @@ async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, w
     const scale = Math.min(maxWidth / logo.naturalWidth, maxHeight / logo.naturalHeight);
     const drawWidth = logo.naturalWidth * scale;
     const drawHeight = logo.naturalHeight * scale;
-    const badgePad = Math.round(base * 0.016);
-    const badgeX = width - pad - drawWidth - badgePad;
-    const badgeY = pad - badgePad;
+    const logoX = width - pad - drawWidth;
+    const logoY = pad;
+
+    // Keep the logo's own transparent background (no visible badge), but back
+    // it with a soft edgeless vignette so it stays legible even on light or
+    // busy parts of the photo -- a drop shadow alone isn't enough contrast
+    // insurance for the lighter teal half of the wordmark.
+    const cx = logoX + drawWidth / 2;
+    const cy = logoY + drawHeight / 2;
+    const radius = Math.max(drawWidth, drawHeight) * 0.85;
+    const vignette = context.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    vignette.addColorStop(0, "rgba(0,8,14,0.5)");
+    vignette.addColorStop(0.7, "rgba(0,8,14,0.2)");
+    vignette.addColorStop(1, "rgba(0,8,14,0)");
+    context.fillStyle = vignette;
+    context.fillRect(logoX - radius, logoY - radius, drawWidth + radius * 2, drawHeight + radius * 2);
 
     context.save();
-    context.shadowColor = "rgba(0,8,14,0.28)";
-    context.shadowBlur = Math.round(badgePad * 1.5);
-    context.shadowOffsetY = 2;
-    context.fillStyle = "rgba(255,255,255,0.94)";
-    roundRect(context, badgeX, badgeY, drawWidth + badgePad * 2, drawHeight + badgePad * 2, badgePad);
-    context.fill();
+    context.shadowColor = "rgba(0,8,14,0.6)";
+    context.shadowBlur = Math.round(base * 0.015);
+    context.shadowOffsetY = 1;
+    context.drawImage(logo, logoX, logoY, drawWidth, drawHeight);
     context.restore();
 
-    context.drawImage(logo, width - pad - drawWidth, pad, drawWidth, drawHeight);
-    return pad + drawHeight + badgePad;
+    return pad + drawHeight + Math.round(base * 0.015);
   } catch {
     return pad;
   }
@@ -200,7 +210,7 @@ function drawTriangleBadge(context: CanvasRenderingContext2D, x: number, y: numb
 }
 
 function drawUspPanelAt(context: CanvasRenderingContext2D, metrics: UspPanelMetrics, top: number) {
-  context.fillStyle = "rgba(60,94,104,0.55)";
+  context.fillStyle = "rgba(103,153,156,0.55)"; // Finderz Keeperz brand groenblauw #67999C
   roundRect(context, metrics.panelX, top, metrics.panelWidth, metrics.panelHeight, Math.round(metrics.innerPad * 0.8));
   context.fill();
 
