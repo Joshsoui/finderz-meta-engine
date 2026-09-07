@@ -55,10 +55,16 @@ function CreativePreview({ campaign, format }: { campaign: Campaign; format: Cre
             <div className="creative-title-banner-job">{campaign.title}</div>
             <div className="creative-title-banner-location">{campaign.location}</div>
           </div>
-          <div className="creative-stat-row">
-            <div className="creative-stat-callout">
-              <div className="creative-stat-label">SALARIS</div>
-              <div className="creative-stat-value">{campaign.usps[0]}</div>
+          <div className="creative-chip-row">
+            <div className="creative-chip creative-chip-hero">
+              <div className="creative-chip-label">SALARIS</div>
+              <div className="creative-chip-value creative-chip-value-hero">{campaign.usps[0]}</div>
+            </div>
+            <div className="creative-chip">
+              <div className="creative-chip-value">{campaign.usps[1]}</div>
+            </div>
+            <div className="creative-chip">
+              <div className="creative-chip-value">{campaign.usps[2]}</div>
             </div>
           </div>
           <div className="creative-cta-pill">SOLLICITEER NU</div>

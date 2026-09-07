@@ -119,20 +119,8 @@ async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, w
     const logoX = width - pad - drawWidth;
     const logoY = pad;
 
-    // Keep the logo's own transparent background (no visible badge), but back
-    // it with a soft edgeless vignette so it stays legible even on light or
-    // busy parts of the photo -- a drop shadow alone isn't enough contrast
-    // insurance for the lighter teal half of the wordmark.
-    const cx = logoX + drawWidth / 2;
-    const cy = logoY + drawHeight / 2;
-    const radius = Math.max(drawWidth, drawHeight) * 0.8;
-    const vignette = context.createRadialGradient(cx, cy, 0, cx, cy, radius);
-    vignette.addColorStop(0, "rgba(0,8,14,0.4)");
-    vignette.addColorStop(0.7, "rgba(0,8,14,0.15)");
-    vignette.addColorStop(1, "rgba(0,8,14,0)");
-    context.fillStyle = vignette;
-    context.fillRect(logoX - radius, logoY - radius, drawWidth + radius * 2, drawHeight + radius * 2);
-
+    // Fully transparent background -- just a drop shadow (follows the logo's
+    // own alpha silhouette, not a filled box or vignette) for a bit of lift.
     context.save();
     context.shadowColor = "rgba(0,8,14,0.6)";
     context.shadowBlur = Math.round(base * 0.015);
@@ -147,19 +135,33 @@ async function drawLogo(context: CanvasRenderingContext2D, data: CreativeData, w
 }
 
 // --- Title banner: translucent blue ribbon, flush left, rounded only on the
-// right so it reads as a floating strip rather than a full-bleed bar. ---
+// right, sized to its own text (not a fixed width) so it reads as a snug
+// floating strip rather than a bar with dead space. ---
 
 type BannerMetrics = { width: number; height: number; radius: number; titleSize: number; locationSize: number; vPad: number; gap: number };
 
-function measureBanner(width: number, pad: number, base: number): BannerMetrics {
+function measureBanner(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number): BannerMetrics {
   const titleSize = Math.round(Math.max(24, base * 0.048));
   const locationSize = Math.round(Math.max(16, base * 0.027));
-  const vPad = Math.round(base * 0.028);
+  const vPad = Math.round(base * 0.026);
   const gap = Math.round(base * 0.01);
+
+  // A couple of pixels of slack between the measured text width and the box
+  // it's given: Math.round() on the box width can land a hair under the
+  // measured width, which would otherwise make drawBannerAt() think the text
+  // doesn't fit and trigger truncation (chopping several characters to make
+  // room for an ellipsis glyph that was never actually needed).
+  const safety = Math.max(2, Math.ceil(base * 0.005));
+  const maxTextWidth = width * 0.8 - pad * 2;
+  context.font = `800 ${titleSize}px ${HEADLINE_FONT}`;
+  const titleWidth = Math.min(context.measureText(data.title).width + safety, maxTextWidth);
+  context.font = `600 ${locationSize}px ${HEADLINE_FONT}`;
+  const locationWidth = Math.min(context.measureText(data.location).width + safety, maxTextWidth);
+
   return {
-    width: Math.round(width * 0.84),
+    width: Math.round(Math.max(titleWidth, locationWidth) + pad * 2),
     height: vPad * 2 + titleSize + gap + locationSize,
-    radius: Math.round(base * 0.03),
+    radius: Math.round(base * 0.028),
     titleSize,
     locationSize,
     vPad,
@@ -188,65 +190,126 @@ function drawBannerAt(context: CanvasRenderingContext2D, data: CreativeData, pad
   );
 }
 
-// --- Salary stat callout: a bold "SALARIS" card, right-aligned, replacing a
-// bulleted USP list with one strong hook (the first USP is always salary). ---
+// --- USP chips: one small card per USP, each sized to its own text, wrapped
+// left-to-right and right-aligned per row. The first is always salary and
+// gets a "SALARIS" caption + bigger value; the other two are plain chips. ---
 
-type StatMetrics = { boxX: number; boxWidth: number; boxHeight: number; innerPad: number; labelSize: number; valueLines: string[]; valueSize: number; valueLineHeight: number };
+type Chip = {
+  width: number; height: number; pad: number;
+  label?: string; labelSize?: number; labelGap?: number;
+  value: string; valueSize: number;
+};
 
-function measureStatCallout(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number): StatMetrics {
-  const boxWidth = Math.round(width * 0.42);
-  const boxX = width - pad - boxWidth;
-  const innerPad = Math.round(base * 0.026);
-  const labelSize = Math.round(Math.max(13, base * 0.021));
-  const textWidth = boxWidth - innerPad * 2;
-  const value = data.usps[0].trim().replace(/\s+/g, " ");
+function measureChip(context: CanvasRenderingContext2D, text: string, base: number, hero: boolean, maxTextWidth: number): Chip {
+  const pad = Math.round(base * (hero ? 0.02 : 0.017));
+  let value = text.trim().replace(/\s+/g, " ");
 
-  let valueSize = Math.round(Math.max(24, base * 0.062));
-  let valueLines: string[];
-  let valueLineHeight: number;
-  do {
+  if (hero) {
+    const labelSize = Math.round(Math.max(11, base * 0.018));
+    const valueSize = Math.round(Math.max(20, base * 0.038));
+    const labelGap = Math.round(base * 0.006);
+    context.font = `800 ${labelSize}px ${HEADLINE_FONT}`;
+    const labelWidth = context.measureText(STAT_LABEL).width;
     context.font = `800 ${valueSize}px ${HEADLINE_FONT}`;
-    valueLines = wrapLines(context, value, textWidth, 2);
-    valueLineHeight = Math.round(valueSize * 1.05);
-    valueSize -= 2;
-  } while (valueLines.some((line) => context.measureText(line).width > textWidth) && valueSize > 16);
+    value = truncateToWidth(context, value, maxTextWidth);
+    const valueWidth = context.measureText(value).width;
+    return {
+      width: Math.round(Math.max(labelWidth, valueWidth) + pad * 2),
+      height: pad * 2 + labelSize + labelGap + valueSize,
+      pad, label: STAT_LABEL, labelSize, labelGap, value, valueSize,
+    };
+  }
 
-  const labelGap = Math.round(base * 0.012);
-  const boxHeight = innerPad * 2 + labelSize + labelGap + valueLines.length * valueLineHeight;
-
-  return { boxX, boxWidth, boxHeight, innerPad, labelSize, valueLines, valueSize: valueSize + 2, valueLineHeight };
+  const valueSize = Math.round(Math.max(15, base * 0.025));
+  context.font = `700 ${valueSize}px ${HEADLINE_FONT}`;
+  value = truncateToWidth(context, value, maxTextWidth);
+  const valueWidth = context.measureText(value).width;
+  return { width: Math.round(valueWidth + pad * 2), height: pad * 2 + valueSize, pad, value, valueSize };
 }
 
-function drawStatCalloutAt(context: CanvasRenderingContext2D, metrics: StatMetrics, base: number, top: number) {
+function drawChip(context: CanvasRenderingContext2D, chip: Chip, base: number, x: number, y: number) {
   context.fillStyle = "rgba(103,153,156,0.92)"; // Finderz Keeperz brand groenblauw #67999C
-  roundRectPath(context, metrics.boxX, top, metrics.boxWidth, metrics.boxHeight, Math.round(base * 0.022));
+  roundRectPath(context, x, y, chip.width, chip.height, Math.round(base * 0.014));
   context.fill();
 
-  const textX = metrics.boxX + metrics.innerPad;
   context.textAlign = "left";
   context.textBaseline = "top";
-  context.fillStyle = "#062434";
-  context.font = `800 ${metrics.labelSize}px ${HEADLINE_FONT}`;
-  context.fillText(STAT_LABEL, textX, top + metrics.innerPad, metrics.boxWidth - metrics.innerPad * 2);
+  context.shadowColor = "rgba(0,8,14,0.35)";
+  context.shadowBlur = Math.round(base * 0.006);
+  context.shadowOffsetY = 1;
+  context.fillStyle = "#ffffff";
 
-  let lineY = top + metrics.innerPad + metrics.labelSize + Math.round(base * 0.012);
-  context.font = `800 ${metrics.valueSize}px ${HEADLINE_FONT}`;
-  metrics.valueLines.forEach((line) => {
-    context.fillText(line, textX, lineY, metrics.boxWidth - metrics.innerPad * 2);
-    lineY += metrics.valueLineHeight;
+  if (chip.label && chip.labelSize && chip.labelGap !== undefined) {
+    context.font = `800 ${chip.labelSize}px ${HEADLINE_FONT}`;
+    context.fillText(chip.label, x + chip.pad, y + chip.pad);
+    context.font = `800 ${chip.valueSize}px ${HEADLINE_FONT}`;
+    context.fillText(chip.value, x + chip.pad, y + chip.pad + chip.labelSize + chip.labelGap);
+  } else {
+    context.font = `700 ${chip.valueSize}px ${HEADLINE_FONT}`;
+    context.fillText(chip.value, x + chip.pad, y + chip.pad);
+  }
+
+  context.shadowColor = "transparent";
+  context.shadowBlur = 0;
+  context.shadowOffsetY = 0;
+}
+
+type ChipRow = { chips: Chip[]; rowWidth: number; rowHeight: number };
+type ChipsBlockMetrics = { rows: ChipRow[]; totalHeight: number; rowGap: number; chipGap: number };
+
+function measureChipsBlock(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number): ChipsBlockMetrics {
+  const maxRowWidth = width - pad * 2;
+  const chips = [
+    measureChip(context, data.usps[0], base, true, maxRowWidth * 0.85),
+    measureChip(context, data.usps[1], base, false, maxRowWidth * 0.55),
+    measureChip(context, data.usps[2], base, false, maxRowWidth * 0.55),
+  ];
+  const chipGap = Math.round(base * 0.014);
+  const rowGap = Math.round(base * 0.012);
+
+  const rows: ChipRow[] = [];
+  let current: Chip[] = [];
+  let currentWidth = 0;
+  for (const chip of chips) {
+    const nextWidth = currentWidth + (current.length ? chipGap : 0) + chip.width;
+    if (current.length && nextWidth > maxRowWidth) {
+      rows.push({ chips: current, rowWidth: currentWidth, rowHeight: Math.max(...current.map((c) => c.height)) });
+      current = [chip];
+      currentWidth = chip.width;
+    } else {
+      current.push(chip);
+      currentWidth = nextWidth;
+    }
+  }
+  if (current.length) rows.push({ chips: current, rowWidth: currentWidth, rowHeight: Math.max(...current.map((c) => c.height)) });
+
+  const totalHeight = rows.reduce((sum, row) => sum + row.rowHeight, 0) + rowGap * Math.max(0, rows.length - 1);
+  return { rows, totalHeight, rowGap, chipGap };
+}
+
+function drawChipsBlockAt(context: CanvasRenderingContext2D, metrics: ChipsBlockMetrics, base: number, width: number, pad: number, top: number) {
+  let rowY = top;
+  metrics.rows.forEach((row) => {
+    let x = width - pad - row.rowWidth;
+    row.chips.forEach((chip) => {
+      drawChip(context, chip, base, x, rowY);
+      x += chip.width + metrics.chipGap;
+    });
+    rowY += row.rowHeight + metrics.rowGap;
   });
 }
 
-// --- CTA pill: small, translucent, left-aligned (not centered) ---
+// --- CTA pill: small, translucent, left-aligned (not centered), sized snugly
+// around its own text. ---
 
 type CtaMetrics = { width: number; height: number; fontSize: number };
 
 function measureCta(context: CanvasRenderingContext2D, base: number): CtaMetrics {
-  const fontSize = Math.round(Math.max(14, base * 0.022));
+  const fontSize = Math.round(Math.max(14, base * 0.021));
   context.font = `800 ${fontSize}px ${HEADLINE_FONT}`;
   const textWidth = context.measureText(CTA_TEXT).width;
-  const hPad = Math.round(base * 0.038);
-  const vPad = Math.round(base * 0.017);
+  const hPad = Math.round(base * 0.028);
+  const vPad = Math.round(base * 0.013);
   return { width: textWidth + hPad * 2, height: fontSize + vPad * 2, fontSize };
 }
 
@@ -328,22 +391,22 @@ export async function renderCreative(data: CreativeData, format: CreativeFormat)
   const gap = Math.round(base * 0.022);
   const bottomMargin = Math.round(base * 0.045);
 
-  // Measure the bottom cluster (CTA, stat callout, banner) first, then stack
-  // it upward from the bottom edge so it always fits regardless of aspect ratio.
+  // Measure the bottom cluster (CTA, USP chips, banner) first, then stack it
+  // upward from the bottom edge so it always fits regardless of aspect ratio.
   const ctaMetrics = measureCta(context, base);
-  const statMetrics = measureStatCallout(context, data, width, pad, base);
-  const bannerMetrics = measureBanner(width, pad, base);
+  const chipsMetrics = measureChipsBlock(context, data, width, pad, base);
+  const bannerMetrics = measureBanner(context, data, width, pad, base);
 
   const ctaTop = height - bottomMargin - ctaMetrics.height;
-  const statTop = ctaTop - gap - statMetrics.boxHeight;
-  const bannerTop = statTop - gap - bannerMetrics.height;
+  const chipsTop = ctaTop - gap - chipsMetrics.totalHeight;
+  const bannerTop = chipsTop - gap - bannerMetrics.height;
 
   const logoBottom = await drawLogo(context, data, width, base);
   const headlineTop = Math.max(Math.round(height * 0.075), logoBottom + Math.round(base * 0.015));
   drawHeadline(context, data, width, pad, base, headlineTop, bannerTop - gap);
 
   drawBannerAt(context, data, pad, bannerMetrics, bannerTop);
-  drawStatCalloutAt(context, statMetrics, base, statTop);
+  drawChipsBlockAt(context, chipsMetrics, base, width, pad, chipsTop);
   drawCtaAt(context, pad, ctaMetrics, ctaTop);
 
   return canvas.toDataURL("image/png");
