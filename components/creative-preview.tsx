@@ -24,7 +24,7 @@ export function CreativePreview({ campaign, format }: { campaign: Campaign; form
             <div className="creative-title-banner-location">{campaign.location}</div>
           </div>
           <div className="creative-chip-row">
-            {campaign.usps.map((usp) => (
+            {campaign.usps.filter((usp) => usp.trim()).map((usp) => (
               <div className="creative-chip" key={usp}>
                 <div className="creative-chip-value">{usp}</div>
               </div>

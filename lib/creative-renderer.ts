@@ -229,9 +229,9 @@ type ChipsBlockMetrics = { chips: Chip[]; totalHeight: number; rowGap: number };
 
 function measureChipsBlock(context: CanvasRenderingContext2D, data: CreativeData, width: number, pad: number, base: number): ChipsBlockMetrics {
   const maxTextWidth = (width - pad * 2) * 0.62;
-  const chips = data.usps.map((usp) => measureChip(context, usp, base, maxTextWidth));
+  const chips = data.usps.filter((usp) => usp.trim()).map((usp) => measureChip(context, usp, base, maxTextWidth));
   const rowGap = Math.round(base * 0.014);
-  const totalHeight = chips.reduce((sum, chip) => sum + chip.height, 0) + rowGap * (chips.length - 1);
+  const totalHeight = chips.reduce((sum, chip) => sum + chip.height, 0) + rowGap * Math.max(0, chips.length - 1);
   return { chips, totalHeight, rowGap };
 }
 
