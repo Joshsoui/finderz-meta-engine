@@ -48,8 +48,8 @@ function ImportCampaignForm({
   const dailyBudgetMismatch = realDailyBudget !== undefined && realDailyBudget > 0 && Math.abs(derivedDailyBudget - realDailyBudget) / realDailyBudget > 0.1;
 
   async function importCampaign() {
-    if (!title.trim() || !location.trim() || !description.trim() || feeNumber <= 0) {
-      toast.error("Vul functie, locatie, omschrijving en fee in.");
+    if (!title.trim() || !location.trim() || feeNumber <= 0) {
+      toast.error("Vul functie, locatie en fee in.");
       return;
     }
     setIsSaving(true);
@@ -61,7 +61,9 @@ function ImportCampaignForm({
           title: title.trim(),
           location: location.trim(),
           salary: salary.trim(),
-          description: description.trim(),
+          // Purely for our own reference (never sent to Meta), so unlike a
+          // freshly-created campaign this shouldn't block the import.
+          description: description.trim() || title.trim(),
           fee: feeNumber,
           durationDays: Math.max(Number(durationDays) || 30, 1),
           metaCampaignId: candidate.metaCampaignId,
@@ -138,7 +140,7 @@ function ImportCampaignForm({
             <span>Deze campagne heeft al meer uitgegeven ({euro.format(spendSoFar)}) dan deze budgetgrens toestaat. Zonder aanpassing pauzeer ik &apos;m meteen bij de eerstvolgende check — verhoog de fee hierboven als dat niet de bedoeling is.</span>
           </div>
         )}
-        <label className="field-label">Vacatureomschrijving <span className="font-normal text-[#607b8d]">voor eigen referentie, wordt niet naar Meta gestuurd</span>
+        <label className="field-label">Vacatureomschrijving <span className="font-normal text-[#607b8d]">optioneel · voor eigen referentie, wordt niet naar Meta gestuurd</span>
           <textarea className="field-input min-h-24 resize-none leading-6" value={description} onChange={(event) => setDescription(event.target.value)} />
         </label>
       </div>
