@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const campaigns = sqliteTable(
   "campaigns",
@@ -87,18 +87,32 @@ export const dailySpendLog = sqliteTable("daily_spend_log", {
 });
 
 /**
- * Same shape as dailySpendLog, but for Indeed spend -- kept as a separate
- * table rather than a "source" column on dailySpendLog so the two never mix
- * by accident. Indeed's own Sponsored Jobs API needs a paid partner
- * application and charges per API call, so unlike Meta this stays manual
- * entry only; this just gives that manual number a place to live and a
- * history, same as Meta's daily spend did before it was automated.
+ * A lightweight, manual-only stand-in for Meta's campaigns table. Indeed's
+ * own Sponsored Jobs API needs a paid partner application and charges per
+ * API call, so unlike Meta there's no automation or real campaign object
+ * here -- just enough of a record (a title, a running/paused status) to
+ * hang daily spend entries off per Indeed campaign, instead of one flat
+ * number for "Indeed" as a whole.
  */
-export const indeedSpendLog = sqliteTable("indeed_spend_log", {
-  date: text("date").primaryKey(), // YYYY-MM-DD, Europe/Amsterdam local date
-  amountCents: integer("amount_cents").notNull(),
+export const indeedCampaigns = sqliteTable("indeed_campaigns", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  status: text("status", { enum: ["active", "paused"] }).notNull().default("active"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/** One manually-entered spend amount for one Indeed campaign on one day. */
+export const indeedSpendLog = sqliteTable(
+  "indeed_spend_log",
+  {
+    campaignId: text("campaign_id").notNull().references(() => indeedCampaigns.id),
+    date: text("date").notNull(), // YYYY-MM-DD, Europe/Amsterdam local date
+    amountCents: integer("amount_cents").notNull(),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [primaryKey({ columns: [table.campaignId, table.date] }), index("idx_indeed_spend_date").on(table.date)]
+);
 
 export const leads = sqliteTable(
   "leads",

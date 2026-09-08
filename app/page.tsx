@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, BarChart3, BrainCircuit,
   CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
-  Megaphone, MousePointerClick, Pause, Pencil, Play,
+  Megaphone, MousePointerClick, Pause, Pencil, Play, Plus,
   RefreshCw, Search, ShieldCheck, Sparkles, Target, Upload,
   TrendingUp, Users, Zap, LoaderCircle,
 } from "lucide-react";
@@ -346,28 +346,25 @@ function AccountSpendCard() {
   );
 }
 
-function IndeedSpendCard() {
-  const [today, setToday] = useState("");
-  const [entries, setEntries] = useState<DailySpendEntry[]>([]);
-  const [totalCents, setTotalCents] = useState(0);
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+type MarketingSpendSummary = {
+  today: { meta: number; indeed: number; total: number };
+  last7d: { meta: number; indeed: number; total: number };
+  lifetime: { meta: number; indeed: number; total: number };
+};
+
+function MarketingTotalCard() {
+  const [summary, setSummary] = useState<MarketingSpendSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch("/api/indeed-spend");
-        const payload = await response.json() as { today?: string; entries?: DailySpendEntry[]; totalAmountCents?: number; error?: string };
-        if (!response.ok || !payload.today) throw new Error(payload.error || "Indeed-spend kon niet worden geladen.");
-        if (cancelled) return;
-        setToday(payload.today);
-        setEntries(payload.entries ?? []);
-        setTotalCents(payload.totalAmountCents ?? 0);
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : "Indeed-spend kon niet worden geladen.");
+        const response = await fetch("/api/marketing-spend-summary");
+        const payload = await response.json() as MarketingSpendSummary & { error?: string };
+        if (response.ok && !cancelled) setSummary(payload);
+      } catch {
+        // The individual channel cards below still work without this one.
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -377,15 +374,85 @@ function IndeedSpendCard() {
     };
   }, []);
 
-  const todayEntry = entries.find((entry) => entry.date === today);
-  const weekTotal = entries.slice(0, 7).reduce((sum, entry) => sum + entry.amountCents, 0) / 100;
+  return (
+    <section className="daily-spend-card">
+      <div className="daily-spend-main">
+        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Totaal marketing vandaag · Meta + Indeed</div>
+        <div className="daily-spend-display">
+          <span className="daily-spend-amount">{isLoading || !summary ? "…" : euro.format(summary.today.total)}</span>
+        </div>
+        <p className="daily-spend-hint">
+          {summary ? `Gesplitst: Meta ${euro.format(summary.today.meta)} · Indeed ${euro.format(summary.today.indeed)}` : "Alles wat vandaag is uitgegeven, over beide kanalen samen."}
+        </p>
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">Laatste 7 dagen</span>
+        <strong className="daily-spend-week-total">{summary ? euro.format(summary.last7d.total) : "—"}</strong>
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">Totaal</span>
+        <strong className="daily-spend-week-total">{summary ? euro.format(summary.lifetime.total) : "—"}</strong>
+      </div>
+    </section>
+  );
+}
 
-  function startEditing() {
-    setDraft(todayEntry ? String(todayEntry.amountCents / 100).replace(".", ",") : "");
-    setIsEditing(true);
+type IndeedCampaign = {
+  id: string;
+  title: string;
+  status: "active" | "paused";
+  todaySpendCents: number;
+  weekSpendCents: number;
+  totalSpendCents: number;
+};
+
+function IndeedSpendCard() {
+  const [today, setToday] = useState("");
+  const [campaigns, setCampaigns] = useState<IndeedCampaign[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/indeed-campaigns");
+        const payload = await response.json() as { today?: string; campaigns?: IndeedCampaign[]; error?: string };
+        if (!response.ok || !payload.today) throw new Error(payload.error || "Indeed-campagnes konden niet worden geladen.");
+        if (cancelled) return;
+        setToday(payload.today);
+        setCampaigns(payload.campaigns ?? []);
+      } catch (error) {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Indeed-campagnes konden niet worden geladen.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const totals = campaigns.reduce(
+    (acc, campaign) => ({
+      today: acc.today + campaign.todaySpendCents,
+      week: acc.week + campaign.weekSpendCents,
+      total: acc.total + campaign.totalSpendCents,
+    }),
+    { today: 0, week: 0, total: 0 },
+  );
+
+  function startEditing(campaign: IndeedCampaign) {
+    setEditingId(campaign.id);
+    setDraft(campaign.todaySpendCents > 0 ? String(campaign.todaySpendCents / 100).replace(".", ",") : "");
   }
 
-  async function saveToday() {
+  async function saveSpend(campaignId: string) {
     const amount = Number(draft.replace(",", "."));
     if (!Number.isFinite(amount) || amount < 0) {
       toast.error("Vul een geldig bedrag in.");
@@ -393,20 +460,20 @@ function IndeedSpendCard() {
     }
     setIsSaving(true);
     try {
-      const response = await fetch("/api/indeed-spend", {
+      const response = await fetch(`/api/indeed-campaigns/${campaignId}/spend`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: today, amount }),
       });
-      const payload = await response.json() as { entry?: DailySpendEntry; error?: string };
+      const payload = await response.json() as { entry?: { amountCents: number }; error?: string };
       if (!response.ok || !payload.entry) throw new Error(payload.error || "Indeed-spend kon niet worden opgeslagen.");
-      const saved = payload.entry;
-      setEntries((current) => {
-        const previous = current.find((entry) => entry.date === saved.date);
-        setTotalCents((total) => total - (previous?.amountCents ?? 0) + saved.amountCents);
-        return [saved, ...current.filter((entry) => entry.date !== saved.date)].sort((a, b) => b.date.localeCompare(a.date));
-      });
-      setIsEditing(false);
+      const savedCents = payload.entry.amountCents;
+      setCampaigns((current) => current.map((campaign) => {
+        if (campaign.id !== campaignId) return campaign;
+        const delta = savedCents - campaign.todaySpendCents;
+        return { ...campaign, todaySpendCents: savedCents, weekSpendCents: campaign.weekSpendCents + delta, totalSpendCents: campaign.totalSpendCents + delta };
+      }));
+      setEditingId(null);
       toast.success("Indeed-spend bijgewerkt");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Indeed-spend kon niet worden opgeslagen.");
@@ -415,53 +482,118 @@ function IndeedSpendCard() {
     }
   }
 
+  async function toggleStatus(campaign: IndeedCampaign) {
+    const nextStatus = campaign.status === "active" ? "paused" : "active";
+    try {
+      const response = await fetch(`/api/indeed-campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const payload = await response.json() as { campaign?: { status: "active" | "paused" }; error?: string };
+      if (!response.ok || !payload.campaign) throw new Error(payload.error || "Status kon niet worden gewijzigd.");
+      setCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, status: payload.campaign!.status } : item)));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Status kon niet worden gewijzigd.");
+    }
+  }
+
+  async function addCampaign() {
+    if (!newTitle.trim()) {
+      toast.error("Vul een titel in.");
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/indeed-campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle.trim() }),
+      });
+      const payload = await response.json() as { campaign?: IndeedCampaign; error?: string };
+      if (!response.ok || !payload.campaign) throw new Error(payload.error || "Indeed-campagne kon niet worden aangemaakt.");
+      setCampaigns((current) => [...current, payload.campaign!]);
+      setNewTitle("");
+      setIsAdding(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Indeed-campagne kon niet worden aangemaakt.");
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
   return (
-    <section className="daily-spend-card">
-      <div className="daily-spend-main">
-        <div className="eyebrow"><BarChart3 className="size-3.5" />Vandaag besteed · Indeed</div>
-        {isEditing ? (
-          <div className="daily-spend-edit">
-            <span className="daily-spend-prefix">€</span>
-            <input
-              autoFocus
-              className="daily-spend-input"
-              inputMode="decimal"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && void saveToday()}
-              placeholder="0"
-            />
-            <button className="primary-button" onClick={saveToday} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Opslaan</button>
-            <button className="secondary-button" onClick={() => setIsEditing(false)}>Annuleren</button>
-          </div>
-        ) : (
-          <div className="daily-spend-display">
-            <span className="daily-spend-amount">{isLoading ? "…" : euro.format((todayEntry?.amountCents ?? 0) / 100)}</span>
-            <button className="secondary-button" onClick={startEditing}><Pencil className="size-4" />{todayEntry ? "Bewerken" : "Invullen"}</button>
-          </div>
-        )}
-        <p className="daily-spend-hint">
-          Indeed heeft geen automatische koppeling zoals Meta (dat vraagt een langer partnertraject bij Indeed zelf) — vul hier dagelijks in wat je in het eigen dashboard van Indeed ziet, dan staat het toch bij elkaar.
-        </p>
-      </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Laatste 7 dagen</span>
-        <strong className="daily-spend-week-total">{euro.format(weekTotal)}</strong>
-        <div className="daily-spend-days">
-          {entries.slice(0, 7).map((entry) => (
-            <div className="daily-spend-day" key={entry.date}>
-              <span>{formatDayLabel(entry.date, today)}</span>
-              <strong>{euro.format(entry.amountCents / 100)}</strong>
-            </div>
-          ))}
-          {!isLoading && entries.length === 0 && <p className="daily-spend-empty">Nog geen dagen ingevuld.</p>}
+    <article className="panel overflow-hidden">
+      <div className="panel-header">
+        <div>
+          <div className="eyebrow"><BarChart3 className="size-3.5" />Handmatig bijgehouden</div>
+          <h2>Indeed-campagnes</h2>
+          <p className="mt-1 text-xs text-[#607b8d]">Geen automatische koppeling (vraagt een partnertraject bij Indeed) — vul per campagne handmatig in, dan telt het mee in het totaal bovenaan.</p>
         </div>
+        <button className="secondary-button" onClick={() => setIsAdding((value) => !value)}><Plus className="size-4" />Campagne</button>
       </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Totaal · sinds bijhouden</span>
-        <strong className="daily-spend-week-total">{euro.format(totalCents / 100)}</strong>
-      </div>
-    </section>
+      {isAdding && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/8 px-5 py-4">
+          <input
+            className="content-input min-w-48 flex-1"
+            placeholder="Titel, bijv. Technisch Medewerker Amsterdam"
+            value={newTitle}
+            onChange={(event) => setNewTitle(event.target.value)}
+            onKeyDown={(event) => event.key === "Enter" && void addCampaign()}
+            autoFocus
+          />
+          <button className="primary-button" onClick={addCampaign} disabled={isCreating}>{isCreating ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Toevoegen</button>
+          <button className="secondary-button" onClick={() => setIsAdding(false)}>Annuleren</button>
+        </div>
+      )}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
+      ) : campaigns.length === 0 ? (
+        <div className="px-5 py-10 text-sm text-[#7f97a8]">Nog geen Indeed-campagnes toegevoegd.</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-4 border-b border-white/8 px-5 py-4 text-sm">
+            <div><span className="block text-xs text-[#607b8d]">Vandaag · alle Indeed-campagnes</span><strong className="text-lg text-white">{euro.format(totals.today / 100)}</strong></div>
+            <div><span className="block text-xs text-[#607b8d]">Laatste 7 dagen</span><strong className="text-lg text-white">{euro.format(totals.week / 100)}</strong></div>
+            <div><span className="block text-xs text-[#607b8d]">Totaal sinds bijhouden</span><strong className="text-lg text-white">{euro.format(totals.total / 100)}</strong></div>
+          </div>
+          <div className="divide-y divide-white/8">
+            {campaigns.map((campaign) => (
+              <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4" key={campaign.id}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={"status " + (campaign.status === "active" ? "status-good" : "status-draft")}><span />{campaign.status === "active" ? "Actief" : "Gepauzeerd"}</span>
+                  <strong className="truncate text-sm text-white">{campaign.title}</strong>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="text-right text-xs text-[#607b8d]"><span className="block">Week: {euro.format(campaign.weekSpendCents / 100)}</span><span className="block">Totaal: {euro.format(campaign.totalSpendCents / 100)}</span></div>
+                  {editingId === campaign.id ? (
+                    <div className="daily-spend-edit">
+                      <span className="daily-spend-prefix">€</span>
+                      <input
+                        autoFocus
+                        className="daily-spend-input"
+                        inputMode="decimal"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        onKeyDown={(event) => event.key === "Enter" && void saveSpend(campaign.id)}
+                        placeholder="0"
+                      />
+                      <button className="primary-button" onClick={() => void saveSpend(campaign.id)} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}</button>
+                      <button className="secondary-button" onClick={() => setEditingId(null)}>Annuleren</button>
+                    </div>
+                  ) : (
+                    <button className="secondary-button" onClick={() => startEditing(campaign)}><Pencil className="size-4" />Vandaag: {euro.format(campaign.todaySpendCents / 100)}</button>
+                  )}
+                  <button className="secondary-button" onClick={() => void toggleStatus(campaign)}>
+                    {campaign.status === "active" ? <><Pause className="size-4" />Pauzeer</> : <><Play className="size-4" />Hervat</>}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </article>
   );
 }
 
@@ -978,6 +1110,8 @@ export default function Home() {
       subtitle="Vrijdag 5 september · laatste analyse 2 min geleden"
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
+          <MarketingTotalCard />
+
           <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} />
 
           <AccountSpendCard />
