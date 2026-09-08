@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { AppShell, FinderzMark } from "@/components/app-shell";
 import { CreativePreview } from "@/components/creative-preview";
+import { type ImportCandidate, ImportCampaignSheet } from "@/components/import-campaign-sheet";
 import { NewCampaignSheet } from "@/components/new-campaign-sheet";
 import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
 import { Progress } from "@/components/ui/progress";
@@ -347,7 +348,7 @@ function AccountSpendCard() {
   );
 }
 
-type AdManagerCampaign = { id: string; name: string; status: string; effectiveStatus: string; spend: number; leads: number };
+type AdManagerCampaign = { id: string; name: string; status: string; effectiveStatus: string; spend: number; leads: number; dailyBudgetCents?: number; lifetimeBudgetCents?: number };
 
 const AD_MANAGER_STATUS: Record<string, { label: string; statusClass: string }> = {
   ACTIVE: { label: "Actief", statusClass: "status-good" },
@@ -360,7 +361,7 @@ const AD_MANAGER_STATUS: Record<string, { label: string; statusClass: string }> 
   IN_PROCESS: { label: "Wordt verwerkt", statusClass: "status-attention" },
 };
 
-function AdManagerCampaignsCard() {
+function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<string>; onImport: (candidate: ImportCandidate) => void }) {
   const [connected, setConnected] = useState(false);
   const [campaigns, setCampaigns] = useState<AdManagerCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -419,7 +420,24 @@ function AdManagerCampaignsCard() {
                 </div>
                 <div className="flex shrink-0 items-center gap-5 text-right text-sm">
                   <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="text-white">{euro.format(campaign.spend)}</strong></div>
+                  <div><span className="block text-xs text-[#607b8d]">Dagbudget</span><strong className="text-white">{campaign.dailyBudgetCents !== undefined ? euro.format(campaign.dailyBudgetCents / 100) : "—"}</strong></div>
                   <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="text-white">{campaign.leads}</strong></div>
+                  {importedIds.has(campaign.id) ? (
+                    <span className="rule-pill">Overgenomen</span>
+                  ) : (
+                    <button
+                      className="secondary-button"
+                      onClick={() => onImport({
+                        metaCampaignId: campaign.id,
+                        name: campaign.name,
+                        effectiveStatus: campaign.effectiveStatus,
+                        spendCents: Math.round(campaign.spend * 100),
+                        dailyBudgetCents: campaign.dailyBudgetCents,
+                      })}
+                    >
+                      Importeer
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -889,6 +907,11 @@ export default function Home() {
   // MarketingTotalCard (which only fetches once on mount) refetches instead
   // of showing a stale total from before that edit.
   const [spendVersion, setSpendVersion] = useState(0);
+  const [importCandidate, setImportCandidate] = useState<ImportCandidate | null>(null);
+  const importedMetaCampaignIds = useMemo(
+    () => new Set(campaigns.map((campaign) => campaign.metaCampaignId).filter((id): id is string => Boolean(id))),
+    [campaigns],
+  );
   const selected = campaigns.find((campaign) => campaign.id === selectedId);
   const totals = useMemo(() => {
     const spend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
@@ -1208,13 +1231,15 @@ export default function Home() {
       subtitle="Vrijdag 5 september · laatste analyse 2 min geleden"
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
+          <ImportCampaignSheet candidate={importCandidate} onClose={() => setImportCandidate(null)} onImported={addCampaign} />
+
           <MarketingTotalCard key={spendVersion} />
 
           <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
           <AccountSpendCard />
 
-          <AdManagerCampaignsCard />
+          <AdManagerCampaignsCard importedIds={importedMetaCampaignIds} onImport={setImportCandidate} />
 
           <IndeedSpendCard onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
