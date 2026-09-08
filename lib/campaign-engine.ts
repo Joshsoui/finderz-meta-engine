@@ -130,7 +130,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "budget_ceiling",
       severity: "critical",
       action: "pause",
-      recommendation: "Ik heb deze advertentie stopgezet: het volledige budget is op. Zo blijven we netjes binnen de afgesproken 20% van de fee.",
+      recommendation: "Ik heb deze campagne stopgezet: het volledige budget is op. Zo blijven we netjes binnen de afgesproken 20% van de fee.",
       budgetChangePercent: 0,
     };
   }
@@ -139,7 +139,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "no_leads_after_spend",
       severity: "critical",
       action: "pause",
-      recommendation: "Ik heb deze advertentie stopgezet: genoeg mensen hebben 'm gezien, maar niemand solliciteerde. De tekst of het beeld sluit waarschijnlijk niet goed genoeg aan — tijd voor een andere insteek.",
+      recommendation: "Ik heb deze campagne stopgezet: genoeg mensen hebben 'm gezien, maar er kwamen geen leads binnen. De tekst of het beeld sluit waarschijnlijk niet goed genoeg aan — tijd voor een andere insteek.",
       budgetChangePercent: 0,
     };
   }
@@ -148,7 +148,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "cpl_above_limit",
       severity: "critical",
       action: "pause",
-      recommendation: "Ik heb deze advertentie stopgezet: een sollicitatie kost nu een stuk meer dan we willen. Laten we een ander beeld of een andere doelgroep proberen.",
+      recommendation: "Ik heb deze campagne stopgezet: een lead kost nu een stuk meer dan we willen. Laten we een ander beeld of een andere doelgroep proberen.",
       budgetChangePercent: 0,
     };
   }
@@ -157,7 +157,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "creative_fatigue",
       severity: "attention",
       action: "refresh_creative",
-      recommendation: "De doelgroep heeft deze advertentie al vaak gezien en reageert minder. Tijd voor een fris beeld en nieuwe tekst — dat kun je hieronder met één klik laten maken.",
+      recommendation: "De doelgroep heeft deze campagne al vaak gezien en reageert minder. Tijd voor een fris beeld en nieuwe tekst — dat kun je hieronder met één klik laten maken.",
       budgetChangePercent: 0,
     };
   }
@@ -167,7 +167,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
         rule: "low_lead_quality",
         severity: "attention",
         action: "keep_running",
-        recommendation: "De kosten per sollicitatie zijn prima, maar te veel sollicitaties blijken niet bruikbaar. Ik verhoog het budget nog niet — check eerst de doelgroep of het sollicitatieformulier.",
+        recommendation: "De kosten per lead zijn prima, maar te veel leads blijken niet bruikbaar. Ik verhoog het budget nog niet — check eerst de doelgroep of het leadformulier.",
         budgetChangePercent: 0,
       };
     }
@@ -184,7 +184,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "healthy_cpl",
       severity: "info",
       action: "scale_budget",
-      recommendation: "Dit gaat goed! Sollicitaties komen binnen tegen een prima prijs. Mag ik het dagbudget met 15% verhogen, zodat we er meer uit halen?",
+      recommendation: "Dit gaat goed! Leads komen binnen tegen een prima prijs. Mag ik het dagbudget met 15% verhogen, zodat we er meer uit halen?",
       budgetChangePercent: 15,
     };
   }
@@ -193,7 +193,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "periodic_creative_check",
       severity: "info",
       action: "keep_running",
-      recommendation: `Deze advertentie draait al ${Math.floor(metrics.hoursSinceLastCreativeCheck / 24)} dagen zonder duidelijke tekenen van sleet. Geen actie nodig, maar bij een langere looptijd is het slim om af en toe zelf te checken of beeld en tekst nog fris aanvoelen.`,
+      recommendation: `Deze campagne draait al ${Math.floor(metrics.hoursSinceLastCreativeCheck / 24)} dagen zonder duidelijke tekenen van sleet. Geen actie nodig, maar bij een langere looptijd is het slim om af en toe zelf te checken of beeld en tekst nog fris aanvoelen.`,
       budgetChangePercent: 0,
     };
   }

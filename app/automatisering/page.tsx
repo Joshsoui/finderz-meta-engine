@@ -22,32 +22,32 @@ const RULES = [
   {
     icon: AlertOctagon,
     title: "Budgetplafond",
-    text: "Stopt de advertentie direct zodra 20% van de fee is uitgegeven — dat plafond wordt nooit overschreden.",
+    text: "Stopt de campagne direct zodra 20% van de fee is uitgegeven — dat plafond wordt nooit overschreden.",
   },
   {
     icon: ShieldAlert,
-    title: "Geen sollicitaties ondanks bereik",
-    text: "Stopt de advertentie wanneer genoeg mensen 'm gezien hebben, maar er nog altijd niemand heeft gesolliciteerd.",
+    title: "Geen leads ondanks bereik",
+    text: "Stopt de campagne wanneer genoeg mensen 'm gezien hebben, maar er nog altijd geen leads binnenkomen.",
   },
   {
     icon: Target,
-    title: "Te dure sollicitaties",
-    text: "Stopt de advertentie zodra een sollicitatie structureel meer dan 50% boven de verwachte prijs uitkomt.",
+    title: "Te dure leads",
+    text: "Stopt de campagne zodra een lead structureel meer dan 50% boven de verwachte prijs uitkomt.",
   },
   {
     icon: ImageIcon,
     title: "Fris houden",
-    text: "Waarschuwt zodra de doelgroep de advertentie te vaak ziet of er weinig op geklikt wordt, zodat je op tijd een nieuw beeld kunt laten maken.",
+    text: "Waarschuwt zodra de doelgroep de campagne te vaak ziet of er weinig op geklikt wordt, zodat je op tijd een nieuw beeld kunt laten maken.",
   },
   {
     icon: ShieldCheck,
     title: "Bewaakt leadkwaliteit",
-    text: "Houdt het budget vast (schaalt niet op) als minder dan de helft van de sollicitaties bruikbaar wordt bevonden, ook als de kosten laag zijn.",
+    text: "Houdt het budget vast (schaalt niet op) als minder dan de helft van de leads bruikbaar wordt bevonden, ook als de kosten laag zijn.",
   },
   {
     icon: TrendingUp,
     title: "Budget opschalen (met jouw goedkeuring)",
-    text: "Stelt voor het dagbudget met maximaal 15% te verhogen zodra het goed gaat — verschijnt als voorstel bij \"Uit te voeren acties\" en wordt pas uitgevoerd na jouw akkoord, begrensd door het portfolio-dagbudget.",
+    text: "Stelt voor het dagbudget met maximaal 15% te verhogen zodra het goed gaat — verschijnt als voorstel bij \"Uit te voeren acties\" en wordt pas uitgevoerd na jouw akkoord, begrensd door de dagbudget-grens.",
   },
 ] as const;
 

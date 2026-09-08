@@ -21,12 +21,12 @@ type OptimizationAction = {
 
 const RULE_LABEL: Record<string, string> = {
   budget_ceiling: "Budgetplafond bereikt",
-  no_leads_after_spend: "Geen sollicitaties ondanks bereik",
-  cpl_above_limit: "Sollicitaties te duur",
-  creative_fatigue: "Advertentie aan vervanging toe",
-  low_lead_quality: "Te veel onbruikbare sollicitaties",
+  no_leads_after_spend: "Geen leads ondanks bereik",
+  cpl_above_limit: "Leads te duur",
+  creative_fatigue: "Campagne aan vervanging toe",
+  low_lead_quality: "Te veel onbruikbare leads",
   healthy_cpl: "Budget verhogen",
-  ad_rejected: "Advertentie afgekeurd door Meta",
+  ad_rejected: "Campagne afgekeurd door Meta",
   periodic_creative_check: "Check of beeld/tekst nog fris is",
   budget_scale_cooldown: "Budget recent al verhoogd",
   learning: "Nog aan het verzamelen van data",
@@ -135,7 +135,7 @@ export default function OptimalisatiesPage() {
       if (!response.ok) throw new Error(payload.error || "Actie kon niet worden verwerkt.");
       setActions(await fetchActions());
       if (decision === "approve") {
-        toast.success(payload.cappedByPortfolioLimit ? "Budget verhoogd, maar begrensd door het portfolio-dagbudget" : "Budget verhoogd");
+        toast.success(payload.cappedByPortfolioLimit ? "Budget verhoogd, maar begrensd door de dagbudget-grens" : "Budget verhoogd");
       } else {
         toast.info("Voorstel afgewezen");
       }

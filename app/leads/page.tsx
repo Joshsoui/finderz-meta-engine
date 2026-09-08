@@ -27,7 +27,7 @@ export default function LeadsPage() {
   async function fetchLeads(): Promise<Lead[]> {
     const response = await fetch("/api/leads");
     const payload = await response.json() as { leads?: Lead[]; error?: string };
-    if (!response.ok || !payload.leads) throw new Error(payload.error || "Sollicitaties konden niet worden geladen.");
+    if (!response.ok || !payload.leads) throw new Error(payload.error || "Leads konden niet worden geladen.");
     return payload.leads;
   }
 
@@ -38,7 +38,7 @@ export default function LeadsPage() {
         const leads = await fetchLeads();
         if (!cancelled) setLeads(leads);
       } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : "Sollicitaties konden niet worden geladen.");
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Leads konden niet worden geladen.");
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -69,19 +69,19 @@ export default function LeadsPage() {
   const rated = leads.filter((lead) => lead.quality !== "unrated").length;
 
   return (
-    <AppShell active="leads" title="Sollicitaties" subtitle="Alle sollicitaties uit je vacatures, markeer welke bruikbaar zijn">
+    <AppShell active="leads" title="Leads" subtitle="Alle leads uit je campagnes, markeer welke bruikbaar zijn">
       <article className="panel overflow-hidden">
         <div className="panel-header">
           <div>
             <div className="eyebrow"><Users className="size-3.5" />Overzicht</div>
-            <h2>Ontvangen sollicitaties</h2>
+            <h2>Ontvangen leads</h2>
           </div>
           {leads.length > 0 && <span className="text-xs text-[#7f97a8]">{rated} van {leads.length} beoordeeld</span>}
         </div>
         {isLoading ? (
           <div className="flex items-center justify-center py-24 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
         ) : leads.length === 0 ? (
-          <p className="py-16 text-center text-sm text-[#7f97a8]">Nog geen sollicitaties binnengekomen. Zodra Meta is gekoppeld en een advertentie live staat, verschijnen sollicitaties hier automatisch.</p>
+          <p className="py-16 text-center text-sm text-[#7f97a8]">Nog geen leads binnengekomen. Zodra Meta is gekoppeld en een campagne live staat, verschijnen leads hier automatisch.</p>
         ) : (
           <div className="divide-y divide-white/8">
             {leads.map((lead) => (

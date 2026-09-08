@@ -52,9 +52,9 @@ export type Campaign = {
 export function recommendationFor(status: CampaignStatus): { recommendation: string; nextAction: string } {
   switch (status) {
     case "draft":
-      return { recommendation: "Deze advertentie staat klaar. Check het beeld en de tekst hiernaast, en zeg het maar wanneer ik 'm live mag zetten.", nextAction: "Start deze advertentie" };
+      return { recommendation: "Deze campagne staat klaar. Check het beeld en de tekst hiernaast, en zeg het maar wanneer ik 'm live mag zetten.", nextAction: "Start deze campagne" };
     case "paused":
-      return { recommendation: "Deze advertentie staat stil. Zeg het maar zodra ik 'm weer mag opstarten.", nextAction: "Herstart deze advertentie" };
+      return { recommendation: "Deze campagne staat stil. Zeg het maar zodra ik 'm weer mag opstarten.", nextAction: "Herstart deze campagne" };
     case "attention":
       return { recommendation: "Hier heb ik jouw hulp bij nodig — bekijk hieronder wat er speelt.", nextAction: "Bekijk wat er speelt" };
     case "completed":

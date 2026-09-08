@@ -85,7 +85,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const { headroomCents, capCents } = await getPortfolioDailyBudgetHeadroomCents(db, existing.id);
       if (headroomCents < MIN_DAILY_BUDGET_CENTS) {
         return Response.json(
-          { error: `Het portfolio-dagbudget van €${Math.round(capCents / 100)} is al volledig benut door andere campagnes. Pauzeer of verlaag eerst een andere campagne om ruimte te maken.` },
+          { error: `Het maximale dagbudget van €${Math.round(capCents / 100)} is al volledig benut door andere campagnes. Pauzeer of verlaag eerst een andere campagne om ruimte te maken.` },
           { status: 400 },
         );
       }
