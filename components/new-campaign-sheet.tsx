@@ -8,6 +8,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger,
 } from "@/components/ui/sheet";
 import { type Campaign, type CampaignRow, rowToCampaign } from "@/lib/campaign-client";
+import { DEFAULT_CAMPAIGN_DURATION_DAYS, deriveDailyBudgetCents } from "@/lib/campaign-engine";
 
 const euro = new Intl.NumberFormat("nl-NL", {
   style: "currency",
@@ -22,6 +23,7 @@ export type NewCampaignInitialValues = {
   description?: string;
   fee?: string;
   otysVacancyId?: string;
+  durationDays?: string;
 };
 
 export function NewCampaignSheet({
@@ -36,6 +38,7 @@ export function NewCampaignSheet({
   const [location, setLocation] = useState(initialValues?.location ?? "Noord-Holland");
   const [salary, setSalary] = useState(initialValues?.salary ?? "€ 3.200 – € 4.000");
   const [fee, setFee] = useState(initialValues?.fee ?? "7000");
+  const [durationDays, setDurationDays] = useState(initialValues?.durationDays ?? String(DEFAULT_CAMPAIGN_DURATION_DAYS));
   const [description, setDescription] = useState(
     initialValues?.description ?? "Werk zelfstandig op locatie, los technische storingen op en onderhoud installaties. Mbo 2 elektrotechniek, rijbewijs B en klantgerichte instelling."
   );
@@ -73,6 +76,7 @@ export function NewCampaignSheet({
 
   async function createCampaign() {
     const numericFee = Math.max(Number(fee) || 0, 0);
+    const numericDuration = Math.max(Number(durationDays) || DEFAULT_CAMPAIGN_DURATION_DAYS, 1);
     if (!title.trim() || !location.trim() || !description.trim() || numericFee <= 0) {
       toast.error("Vul de functie, locatie, vacaturetekst en fee in.");
       return;
@@ -81,7 +85,7 @@ export function NewCampaignSheet({
     try {
       const vacancy = {
         title: title.trim(), location: location.trim(), salary: salary.trim(),
-        description: description.trim(), fee: numericFee,
+        description: description.trim(), fee: numericFee, durationDays: numericDuration,
       };
       const analysisResponse = await fetch("/api/analyze-vacancy", {
         method: "POST",
@@ -181,16 +185,24 @@ export function NewCampaignSheet({
               <input className="field-input" value={salary} onChange={(event) => setSalary(event.target.value)} />
             </label>
           </div>
-          <label className="field-label">Verwachte plaatsingsfee
-            <div className="relative">
-              <Euro className="absolute left-3 top-3.5 size-4 text-[#6f8798]" />
-              <input className="field-input pl-9" inputMode="numeric" value={fee} onChange={(event) => setFee(event.target.value)} />
-            </div>
-          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="field-label">Verwachte plaatsingsfee
+              <div className="relative">
+                <Euro className="absolute left-3 top-3.5 size-4 text-[#6f8798]" />
+                <input className="field-input pl-9" inputMode="numeric" value={fee} onChange={(event) => setFee(event.target.value)} />
+              </div>
+            </label>
+            <label className="field-label">Verwachte looptijd (dagen)
+              <input className="field-input" inputMode="numeric" value={durationDays} onChange={(event) => setDurationDays(event.target.value)} />
+            </label>
+          </div>
           <div className="budget-preview">
             <div><span>Maximaal advertentiebudget</span><strong>{euro.format((Number(fee) || 0) * 0.2)}</strong></div>
             <span className="rule-pill">20% van fee</span>
           </div>
+          <p className="text-xs leading-5 text-[#7f97a8]">
+            Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round((Number(fee) || 0) * 0.2 * 100), Math.max(Number(durationDays) || DEFAULT_CAMPAIGN_DURATION_DAYS, 1)) / 100)}, gespreid over de opgegeven looptijd. Loopt de campagne langer (bijv. één die je bewust langer laat draaien), zet de looptijd dan hoger zodat het budget niet te snel opraakt.
+          </p>
           <label className="field-label">Vacatureomschrijving
             <textarea className="field-input min-h-32 resize-none leading-6" value={description} onChange={(event) => setDescription(event.target.value)} />
           </label>

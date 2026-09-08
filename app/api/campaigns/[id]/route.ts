@@ -21,6 +21,7 @@ type UpdateCampaignInput = {
   otysVacancyId?: string;
   qualityLeads?: number;
   metaCampaignId?: string;
+  campaignDurationDays?: number;
 };
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -45,10 +46,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.otysVacancyId !== undefined) update.otysVacancyId = input.otysVacancyId.trim() || null;
     if (Number.isFinite(input.qualityLeads)) update.qualityLeads = Math.max(0, Math.round(input.qualityLeads!));
     if (input.metaCampaignId) update.metaCampaignId = input.metaCampaignId;
+    if (Number.isFinite(input.campaignDurationDays)) update.campaignDurationDays = Math.max(1, Math.round(input.campaignDurationDays!));
 
     const db = await getDb();
     const [existing] = await db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
     if (!existing) return Response.json({ error: "Campaign not found" }, { status: 404 });
+
+    if (update.status === "live" && !existing.liveSince) update.liveSince = update.updatedAt;
 
     const credentials = getMetaCredentials();
     if (credentials && update.status === "live" && !existing.metaCampaignId) {
@@ -70,10 +74,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       // maxBudgetCents is a lifetime cap (20% of the fee), not a daily
       // spend target -- Meta's daily_budget field needs the latter, so it's
       // derived rather than passed straight through (see campaign-engine.ts).
-      const { metaCampaignId, metaLeadFormId } = await createMetaCampaign({
+      const { metaCampaignId, metaAdId, metaLeadFormId } = await createMetaCampaign({
         title: existing.title,
         location: existing.location,
-        dailyBudgetCents: deriveDailyBudgetCents(update.maxBudgetCents ?? existing.maxBudgetCents),
+        dailyBudgetCents: deriveDailyBudgetCents(
+          update.maxBudgetCents ?? existing.maxBudgetCents,
+          update.campaignDurationDays ?? existing.campaignDurationDays,
+        ),
         primaryText: update.primaryText ?? existing.primaryText,
         headline: update.headline ?? existing.headline,
         description: update.descriptionText ?? existing.descriptionText,
@@ -81,6 +88,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         otysVacancyId: (update.otysVacancyId ?? existing.otysVacancyId) || undefined,
       });
       update.metaCampaignId = metaCampaignId;
+      update.metaAdId = metaAdId;
       update.metaLeadFormId = metaLeadFormId;
     } else if (credentials && existing.metaCampaignId && update.status === "paused") {
       await setMetaCampaignStatus(existing.metaCampaignId, "PAUSED");

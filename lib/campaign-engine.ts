@@ -4,23 +4,30 @@ export const MAX_BUDGET_SHARE = 0.2;
 export const BUDGET_SCALE_COOLDOWN_HOURS = 24;
 
 /**
- * Assumed campaign duration used to convert the lifetime budget cap
- * (maxBudget, 20% of the fee) into the daily_budget Meta actually requires.
- * Meta has no concept of a plain lifetime cap for this campaign type, so
- * without this a naive integration would hand Meta the *entire* lifetime
- * cap as its daily spend target -- exhausting the whole budget in a single
- * day. 30 days is a reasonable default for a vacancy campaign; adjust once
- * real campaign durations are known.
+ * Default expected campaign duration (days), used to seed a new campaign's
+ * own campaignDurationDays -- most vacancy campaigns here run 1-2 weeks, so
+ * 10 splits that range; a long-running exception is expected to have its
+ * own, much larger value set explicitly on the campaign.
  */
-export const CAMPAIGN_PACING_DAYS = 30;
+export const DEFAULT_CAMPAIGN_DURATION_DAYS = 10;
 
 /** Meta rejects a daily_budget below its own per-currency/objective minimum; this is a conservative floor so the app fails predictably rather than silently proposing an unviable budget. Meta's actual minimum may be lower or higher -- the first real API call will confirm. */
 export const MIN_DAILY_BUDGET_CENTS = 500;
 
-/** Derives the daily_budget (cents) to send Meta from the campaign's lifetime cap. */
-export function deriveDailyBudgetCents(maxBudgetCents: number): number {
-  return Math.max(Math.ceil(maxBudgetCents / CAMPAIGN_PACING_DAYS), MIN_DAILY_BUDGET_CENTS);
+/**
+ * Derives the daily_budget (cents) Meta needs from the campaign's lifetime
+ * cap (maxBudget, 20% of the fee) and its expected duration. Meta has no
+ * concept of a plain lifetime cap for this campaign type, so without this a
+ * naive integration would hand Meta the *entire* lifetime cap as its daily
+ * spend target -- exhausting the whole budget in a single day instead of
+ * pacing it across the campaign's real run.
+ */
+export function deriveDailyBudgetCents(maxBudgetCents: number, durationDays: number): number {
+  return Math.max(Math.ceil(maxBudgetCents / Math.max(durationDays, 1)), MIN_DAILY_BUDGET_CENTS);
 }
+
+/** How often (hours) a long-running campaign gets a periodic "check the creative is still fresh" nudge, independent of whether reactive fatigue (frequency/CTR) has fired yet -- a huge audience can take a long time to hit those thresholds even though the copy has gone stale. */
+export const PERIODIC_CREATIVE_CHECK_HOURS = 24 * 7;
 
 export type VacancyInput = {
   title: string;
@@ -29,6 +36,7 @@ export type VacancyInput = {
   description: string;
   fee: number;
   targetLeads?: number;
+  durationDays?: number;
 };
 
 export type CampaignMetrics = {
@@ -43,6 +51,8 @@ export type CampaignMetrics = {
   qualityLeads?: number;
   /** Hours since the last automatic budget increase on this campaign. Undefined/omitted means it has never been scaled. */
   hoursSinceLastBudgetScale?: number;
+  /** Hours since the periodic creative-freshness nudge last fired (or since the campaign went live, if it never has). Undefined means the campaign isn't live yet. */
+  hoursSinceLastCreativeCheck?: number;
 };
 
 export const MIN_LEAD_QUALITY_RATIO = 0.5;
@@ -64,12 +74,14 @@ export function generateCampaign(input: VacancyInput) {
   const maxBudget = Math.round(input.fee * MAX_BUDGET_SHARE * 100) / 100;
   const targetLeads = Math.max(input.targetLeads ?? 28, 1);
   const targetCpl = Math.round((maxBudget / targetLeads) * 100) / 100;
+  const durationDays = Math.max(input.durationDays ?? DEFAULT_CAMPAIGN_DURATION_DAYS, 1);
   const salary = input.salary?.trim() || "Goed salaris";
   const usps = [salary, "Uitzicht op vast contract", "Persoonlijke begeleiding"] as const;
 
   return {
     maxBudget,
     targetCpl,
+    durationDays,
     audience: {
       region: input.location.trim(),
       ageRange: "23–55",
@@ -174,6 +186,15 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       action: "scale_budget",
       recommendation: "Campagne presteert binnen de doel-CPL met voldoende bruikbare leads. Verhoog het dagbudget gecontroleerd met maximaal 15%.",
       budgetChangePercent: 15,
+    };
+  }
+  if (metrics.hoursSinceLastCreativeCheck !== undefined && metrics.hoursSinceLastCreativeCheck >= PERIODIC_CREATIVE_CHECK_HOURS) {
+    return {
+      rule: "periodic_creative_check",
+      severity: "info",
+      action: "keep_running",
+      recommendation: `Deze campagne draait al ${Math.floor(metrics.hoursSinceLastCreativeCheck / 24)} dagen zonder dat frequentie of CTR fatigue aangaven. Controleer bij een langlopende campagne toch periodiek of beeld en tekst nog fris aanvoelen.`,
+      budgetChangePercent: 0,
     };
   }
   return {

@@ -19,7 +19,8 @@ after(async () => {
 
 const {
   generateCampaign, evaluateCampaign, deriveDailyBudgetCents,
-  MAX_BUDGET_SHARE, MIN_LEAD_QUALITY_RATIO, BUDGET_SCALE_COOLDOWN_HOURS, CAMPAIGN_PACING_DAYS, MIN_DAILY_BUDGET_CENTS,
+  MAX_BUDGET_SHARE, MIN_LEAD_QUALITY_RATIO, BUDGET_SCALE_COOLDOWN_HOURS, DEFAULT_CAMPAIGN_DURATION_DAYS, MIN_DAILY_BUDGET_CENTS,
+  PERIODIC_CREATIVE_CHECK_HOURS,
 } = await vite.ssrLoadModule("/lib/campaign-engine.ts");
 
 const baseVacancy = {
@@ -71,6 +72,16 @@ test("generateCampaign clamps a zero or negative targetLeads to at least 1", () 
   const negative = generateCampaign({ ...baseVacancy, targetLeads: -5 });
   assert.equal(zero.targetCpl, zero.maxBudget);
   assert.equal(negative.targetCpl, negative.maxBudget);
+});
+
+test("generateCampaign defaults durationDays when not given", () => {
+  const result = generateCampaign(baseVacancy);
+  assert.equal(result.durationDays, DEFAULT_CAMPAIGN_DURATION_DAYS);
+});
+
+test("generateCampaign honors an explicit durationDays for a long-running campaign", () => {
+  const result = generateCampaign({ ...baseVacancy, durationDays: 60 });
+  assert.equal(result.durationDays, 60);
 });
 
 test("generateCampaign falls back to a generic salary line when none is given", () => {
@@ -204,12 +215,34 @@ test("BUDGET_SCALE_COOLDOWN_HOURS is 24", () => {
   assert.equal(BUDGET_SCALE_COOLDOWN_HOURS, 24);
 });
 
-test("deriveDailyBudgetCents paces the lifetime cap over the assumed campaign duration", () => {
-  assert.equal(deriveDailyBudgetCents(30 * 100_00), 100_00);
-  assert.equal(CAMPAIGN_PACING_DAYS, 30);
+test("deriveDailyBudgetCents paces the lifetime cap over the given campaign duration", () => {
+  assert.equal(deriveDailyBudgetCents(30 * 100_00, 30), 100_00);
+  assert.equal(deriveDailyBudgetCents(14 * 100_00, 7), 200_00);
+  assert.equal(DEFAULT_CAMPAIGN_DURATION_DAYS, 10);
 });
 
 test("deriveDailyBudgetCents never proposes a daily budget below the safety floor", () => {
-  assert.equal(deriveDailyBudgetCents(1), MIN_DAILY_BUDGET_CENTS);
-  assert.equal(deriveDailyBudgetCents(0), MIN_DAILY_BUDGET_CENTS);
+  assert.equal(deriveDailyBudgetCents(1, 30), MIN_DAILY_BUDGET_CENTS);
+  assert.equal(deriveDailyBudgetCents(0, 30), MIN_DAILY_BUDGET_CENTS);
+});
+
+test("deriveDailyBudgetCents treats a zero or negative duration as at least 1 day", () => {
+  assert.equal(deriveDailyBudgetCents(10_00, 0), 10_00);
+  assert.equal(deriveDailyBudgetCents(10_00, -5), 10_00);
+});
+
+test("PERIODIC_CREATIVE_CHECK_HOURS is 7 days", () => {
+  assert.equal(PERIODIC_CREATIVE_CHECK_HOURS, 24 * 7);
+});
+
+test("evaluateCampaign nudges a periodic creative check on a long-running, otherwise-quiet campaign", () => {
+  const decision = evaluateCampaign(baseMetrics({ hoursSinceLastCreativeCheck: PERIODIC_CREATIVE_CHECK_HOURS + 1 }));
+  assert.equal(decision.rule, "periodic_creative_check");
+  assert.equal(decision.action, "keep_running");
+  assert.equal(decision.budgetChangePercent, 0);
+});
+
+test("evaluateCampaign does not nudge a periodic creative check before the interval has passed", () => {
+  const decision = evaluateCampaign(baseMetrics({ hoursSinceLastCreativeCheck: 1 }));
+  assert.equal(decision.rule, "learning");
 });

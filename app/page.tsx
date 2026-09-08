@@ -12,6 +12,7 @@ import {
 import { AppShell, FinderzMark } from "@/components/app-shell";
 import { CreativePreview } from "@/components/creative-preview";
 import { NewCampaignSheet } from "@/components/new-campaign-sheet";
+import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
 import { Progress } from "@/components/ui/progress";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -28,7 +29,29 @@ import {
 } from "@/lib/creative-renderer";
 import { useMetaStatus } from "@/lib/use-meta-status";
 
-const activityFeed: Array<{ time: string; tone: string; title: string; detail: string }> = [];
+type OptimizationAction = {
+  id: number;
+  rule: string;
+  severity: "info" | "attention" | "critical";
+  recommendation: string;
+  createdAt: string;
+  campaignTitle: string;
+};
+
+const ACTIVITY_RULE_LABEL: Record<string, string> = {
+  budget_ceiling: "Budgetplafond bereikt",
+  no_leads_after_spend: "Geen leads na spend",
+  cpl_above_limit: "CPL boven limiet",
+  creative_fatigue: "Creative fatigue",
+  low_lead_quality: "Lage leadkwaliteit",
+  healthy_cpl: "Gezonde CPL",
+  ad_rejected: "Advertentie afgekeurd",
+  periodic_creative_check: "Periodieke creative-check",
+};
+
+const ACTIVITY_TONE: Record<OptimizationAction["severity"], string> = { info: "blue", attention: "amber", critical: "red" };
+
+const activityDateFormat = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 const euro = new Intl.NumberFormat("nl-NL", {
   style: "currency",
@@ -36,18 +59,47 @@ const euro = new Intl.NumberFormat("nl-NL", {
   maximumFractionDigits: 0,
 });
 
-function TrendChart() {
-  const points = "2,89 48,75 94,78 140,57 186,61 232,38 278,45 324,28 370,33 416,18 462,23 508,12";
+type HistoryPoint = { recordedAt: string; cpl: number | null };
+
+const trendDateFormat = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "short" });
+
+function TrendChart({ history }: { history: HistoryPoint[] }) {
+  const valid = history.filter((point): point is { recordedAt: string; cpl: number } => point.cpl !== null);
+
+  if (valid.length < 2) {
+    return (
+      <div className="trend-chart flex items-center justify-center" aria-label="Kosten per lead">
+        <p className="text-sm text-[#6f8798]">Nog onvoldoende meetpunten voor een trend. Komt vanzelf zodra de campagne langer draait.</p>
+      </div>
+    );
+  }
+
+  const width = 510;
+  const height = 110;
+  const cpls = valid.map((point) => point.cpl);
+  const min = Math.min(...cpls);
+  const max = Math.max(...cpls);
+  const range = max - min || 1;
+  const coords = valid.map((point, index) => {
+    const x = 2 + (index / (valid.length - 1)) * (width - 4);
+    const y = height - 4 - ((point.cpl - min) / range) * (height - 8);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const last = coords[coords.length - 1].split(",");
+  const labelIndexes = [0, Math.floor((valid.length - 1) / 2), valid.length - 1];
+
   return (
-    <div className="trend-chart" aria-label="Kosten per lead over twaalf dagen">
+    <div className="trend-chart" aria-label="Kosten per lead over tijd">
       <div className="trend-grid" />
-      <svg viewBox="0 0 510 110" role="img" aria-hidden="true">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-hidden="true">
         <defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1aa6d1" stopOpacity="0.3" /><stop offset="100%" stopColor="#1aa6d1" stopOpacity="0" /></linearGradient></defs>
-        <path d={"M " + points.replaceAll(" ", " L ") + " L 508,110 L 2,110 Z"} fill="url(#area)" />
-        <polyline points={points} fill="none" stroke="#35b7df" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="508" cy="12" r="5" fill="#0e324e" stroke="#72d1ec" strokeWidth="3" />
+        <path d={`M ${coords.join(" L ")} L ${width - 2},${height} L 2,${height} Z`} fill="url(#area)" />
+        <polyline points={coords.join(" ")} fill="none" stroke="#35b7df" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={last[0]} cy={last[1]} r="5" fill="#0e324e" stroke="#72d1ec" strokeWidth="3" />
       </svg>
-      <div className="mt-2 flex justify-between text-xs text-[#6f8798]"><span>25 aug</span><span>28 aug</span><span>31 aug</span><span>3 sep</span><span>5 sep</span></div>
+      <div className="mt-2 flex justify-between text-xs text-[#6f8798]">
+        {labelIndexes.map((index) => <span key={index}>{trendDateFormat.format(new Date(valid[index].recordedAt))}</span>)}
+      </div>
     </div>
   );
 }
@@ -190,6 +242,8 @@ export default function Home() {
   const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
   const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [recentActions, setRecentActions] = useState<OptimizationAction[]>([]);
+  const [campaignHistory, setCampaignHistory] = useState<HistoryPoint[]>([]);
   const selected = campaigns.find((campaign) => campaign.id === selectedId);
   const totals = useMemo(() => {
     const spend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
@@ -231,6 +285,46 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/optimization-actions");
+        const payload = await response.json() as { actions?: OptimizationAction[]; error?: string };
+        if (response.ok && payload.actions && !cancelled) setRecentActions(payload.actions.slice(0, 5));
+      } catch {
+        // The dashboard still works without this panel; fail quietly.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!selected) {
+        if (!cancelled) setCampaignHistory([]);
+        return;
+      }
+      try {
+        const response = await fetch(`/api/campaigns/${selected.id}/history`);
+        const payload = await response.json() as { points?: HistoryPoint[]; error?: string };
+        if (response.ok && payload.points && !cancelled) setCampaignHistory(payload.points);
+      } catch {
+        // The performance tab still works without a trend; fail quietly.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Depend on the id, not the whole `selected` object: `selected` is
+    // re-derived via campaigns.find() on every render, so depending on it
+    // directly would refetch history on every unrelated campaign edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   function addCampaign(campaign: Campaign) {
     setCampaigns((current) => [campaign, ...current]);
@@ -531,13 +625,23 @@ export default function Home() {
                           <div><p className="text-sm text-[#718a9c]">Kosten per lead</p><div className="mt-1 flex items-baseline gap-3"><span className="text-3xl font-semibold text-white">{cpl ? euro.format(cpl) : "—"}</span>{cpl > 0 && <span className="text-sm font-semibold text-[#4fc6e9]">{Math.round((1 - cpl / selected.targetCpl) * 100)}% vs. doel</span>}</div></div>
                           <div className="flex gap-5 text-right"><div><span className="block text-xs text-[#607b8d]">CTR</span><strong className="text-sm text-white">{ctr.toFixed(2).replace(".", ",")}%</strong></div><div><span className="block text-xs text-[#607b8d]">Klikken</span><strong className="text-sm text-white">{selected.clicks}</strong></div></div>
                         </div>
-                        <TrendChart />
+                        <TrendChart history={campaignHistory} />
                       </div>
                       <div className="rounded-xl border border-white/8 bg-[#0e324e] p-5">
                         <div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-white">Budgetkader</p><p className="mt-1 text-xs text-[#607b8d]">Maximaal 20% van fee</p></div><ShieldCheck className="size-5 text-[#35b7df]" /></div>
                         <div className="mt-6 flex items-end justify-between"><div><span className="text-2xl font-semibold text-white">{euro.format(selected.spend)}</span><span className="ml-1 text-sm text-[#6f8798]">/ {euro.format(selected.maxBudget)}</span></div><span className="text-sm font-bold text-[#73cbe5]">{Math.round(budgetUsed)}%</span></div>
                         <Progress value={budgetUsed} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />
                         <div className="mt-5 grid grid-cols-2 gap-3"><div className="budget-stat"><span>Fee</span><strong>{euro.format(selected.fee)}</strong></div><div className="budget-stat"><span>Resterend</span><strong>{euro.format(Math.max(selected.maxBudget - selected.spend, 0))}</strong></div></div>
+                        <label className="mt-5 block text-xs text-[#91aabb]">Verwachte looptijd (dagen)
+                          <input
+                            className="content-input mt-1"
+                            inputMode="numeric"
+                            value={selected.campaignDurationDays}
+                            onChange={(event) => patchSelected({ campaignDurationDays: Math.max(1, Number(event.target.value) || 1) })}
+                            onBlur={() => void persistSelected({ campaignDurationDays: selected.campaignDurationDays })}
+                          />
+                        </label>
+                        <p className="mt-2 text-xs leading-5 text-[#607b8d]">Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round(selected.maxBudget * 100), selected.campaignDurationDays) / 100)}. Een campagne die je bewust langer laat draaien, moet hier een hoger aantal dagen hebben staan.</p>
                       </div>
                     </div>
                   </TabsContent>
@@ -622,16 +726,31 @@ export default function Home() {
 
               <article className="panel p-5">
                 <div className="flex items-center justify-between"><div><div className="eyebrow"><Clock3 className="size-3.5" />24/7 monitoring</div><h2 className="mt-2">Recente acties</h2></div><span className="live-pulse"><span />Live</span></div>
-                <div className="mt-5 space-y-5">{activityFeed.map((item) => <div className="activity-item" key={item.title}><div className={"activity-dot activity-" + item.tone} /><div className="min-w-0"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-semibold text-[#d7e2e8]">{item.title}</p><span className="shrink-0 text-[11px] text-[#526f82]">{item.time}</span></div><p className="mt-1 text-xs leading-5 text-[#6f8798]">{item.detail}</p></div></div>)}</div>
+                {recentActions.length === 0 ? (
+                  <p className="mt-5 text-sm text-[#7f97a8]">Nog geen automatische acties. Zodra een live campagne wordt geëvalueerd, verschijnen de resultaten hier.</p>
+                ) : (
+                  <div className="mt-5 space-y-5">{recentActions.map((item) => (
+                    <div className="activity-item" key={item.id}>
+                      <div className={"activity-dot activity-" + ACTIVITY_TONE[item.severity]} />
+                      <div className="min-w-0">
+                        <div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-semibold text-[#d7e2e8]">{ACTIVITY_RULE_LABEL[item.rule] ?? item.rule}</p><span className="shrink-0 text-[11px] text-[#526f82]">{activityDateFormat.format(new Date(item.createdAt))}</span></div>
+                        <p className="mt-1 text-xs leading-5 text-[#6f8798]">{item.campaignTitle} · {item.recommendation}</p>
+                      </div>
+                    </div>
+                  ))}</div>
+                )}
                 <Link href="/automatisering" className="secondary-button mt-5 w-full justify-center"><BarChart3 className="size-4" />Bekijk beslisregels</Link>
               </article>
 
               <article className="panel overflow-hidden">
-                <div className="border-b border-white/8 p-5"><div className="flex items-center justify-between"><div><div className="eyebrow"><MousePointerClick className="size-3.5" />Meta-koppeling</div><h2 className="mt-2">Accountstatus</h2></div>{metaStatus.configured ? <CheckCircle2 className="size-5 text-[#4ade80]" /> : <AlertTriangle className="size-5 text-[#df9826]" />}</div></div>
+                <div className="border-b border-white/8 p-5"><div className="flex items-center justify-between"><div><div className="eyebrow"><MousePointerClick className="size-3.5" />Meta-koppeling</div><h2 className="mt-2">Accountstatus</h2></div>{!metaStatus.configured ? <AlertTriangle className="size-5 text-[#df9826]" /> : metaStatus.healthy ? <CheckCircle2 className="size-5 text-[#4ade80]" /> : <AlertTriangle className="size-5 text-[#e5595e]" />}</div></div>
                 <div className="space-y-3 p-5">
                   <div className="connection-row"><span>Advertentieaccount</span><strong className={metaStatus.services.adsManager ? "text-[#7fd99c]" : undefined}>{metaStatus.services.adsManager ? "Gekoppeld" : "Nog koppelen"}</strong></div>
                   <div className="connection-row"><span>Lead Forms</span><strong className={metaStatus.services.leadForms ? "text-[#7fd99c]" : undefined}>{metaStatus.services.leadForms ? "Gekoppeld" : "Nog koppelen"}</strong></div>
                   <div className="connection-row"><span>Automatische acties</span><strong className={metaStatus.mode === "connected" ? "text-[#7fd99c]" : undefined}>{metaStatus.mode === "connected" ? "Live" : "Sandbox"}</strong></div>
+                  {metaStatus.mode === "connected" && !metaStatus.healthy && (
+                    <div className="connection-row"><span>Verbinding</span><strong className="text-[#f2a1a5]" title={metaStatus.lastErrorMessage ?? undefined}>Faalt herhaaldelijk</strong></div>
+                  )}
                 </div>
               </article>
             </aside>

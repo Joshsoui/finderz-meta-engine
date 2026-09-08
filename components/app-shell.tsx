@@ -42,6 +42,7 @@ export function AppShell({
 }) {
   const metaStatus = useMetaStatus();
   const isConnected = metaStatus.mode === "connected";
+  const isBroken = isConnected && !metaStatus.healthy;
 
   return (
     <SidebarProvider>
@@ -105,9 +106,15 @@ export function AppShell({
           <SidebarTrigger className="mr-3 text-[#91aabb] hover:bg-white/5 hover:text-white" />
           <div className="min-w-0"><h1 className="truncate text-lg font-semibold tracking-tight text-white">{title}</h1>{subtitle && <p className="hidden text-xs text-[#6f8798] sm:block">{subtitle}</p>}</div>
           <div className="ml-auto flex items-center gap-3">
-            <div className={"hidden items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold sm:flex " + (isConnected ? "border-[#3f9d5f] bg-[#123a26] text-[#7fd99c]" : "border-[#256184] bg-[#13425e] text-[#82cbe1]")}>
-              <span className={"size-1.5 rounded-full " + (isConnected ? "bg-[#4ade80] shadow-[0_0_8px_#4ade80]" : "bg-[#35b7df] shadow-[0_0_8px_#35b7df]")} />
-              {isConnected ? "Live gekoppeld" : "Sandbox actief"}
+            <div
+              className={
+                "hidden items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold sm:flex " +
+                (isBroken ? "border-[#d5565c] bg-[#3a1417] text-[#f2a1a5]" : isConnected ? "border-[#3f9d5f] bg-[#123a26] text-[#7fd99c]" : "border-[#256184] bg-[#13425e] text-[#82cbe1]")
+              }
+              title={isBroken ? metaStatus.lastErrorMessage ?? undefined : undefined}
+            >
+              <span className={"size-1.5 rounded-full " + (isBroken ? "bg-[#e5595e] shadow-[0_0_8px_#e5595e]" : isConnected ? "bg-[#4ade80] shadow-[0_0_8px_#4ade80]" : "bg-[#35b7df] shadow-[0_0_8px_#35b7df]")} />
+              {isBroken ? "Meta-koppeling faalt" : isConnected ? "Live gekoppeld" : "Sandbox actief"}
             </div>
             {headerActions}
           </div>

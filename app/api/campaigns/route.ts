@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       description: input.description,
       fee: Number(input.fee),
       targetLeads: input.targetLeads,
+      durationDays: input.durationDays,
     };
     const generated = generateCampaign(vacancy);
     const usps = input.usps && input.usps.length === 3 ? input.usps : generated.usps;
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
       feeCents: Math.round(vacancy.fee * 100),
       maxBudgetCents: Math.round(generated.maxBudget * 100),
       targetCplCents: Math.round(generated.targetCpl * 100),
+      campaignDurationDays: generated.durationDays,
       primaryText: copy.primaryText,
       headline: copy.headline,
       descriptionText: copy.description,

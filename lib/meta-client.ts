@@ -139,7 +139,7 @@ export type CreateMetaCampaignInput = {
  * ignore age/gender targeting regardless of what's requested here -- that's
  * expected, not a bug.
  */
-export async function createMetaCampaign(input: CreateMetaCampaignInput): Promise<{ metaCampaignId: string; metaLeadFormId: string }> {
+export async function createMetaCampaign(input: CreateMetaCampaignInput): Promise<{ metaCampaignId: string; metaAdId: string; metaLeadFormId: string }> {
   const credentials = getMetaCredentials();
   if (!credentials) throw new Error("Meta is not configured (missing META_ACCESS_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID)");
 
@@ -231,7 +231,7 @@ export async function createMetaCampaign(input: CreateMetaCampaignInput): Promis
     },
   });
 
-  await metaRequest(`/act_${credentials.adAccountId}/ads`, credentials.accessToken, {
+  const ad = await metaRequest<{ id: string }>(`/act_${credentials.adAccountId}/ads`, credentials.accessToken, {
     method: "POST",
     params: {
       name: `${input.title} - ad`,
@@ -241,7 +241,7 @@ export async function createMetaCampaign(input: CreateMetaCampaignInput): Promis
     },
   });
 
-  return { metaCampaignId: campaign.id, metaLeadFormId: leadFormId };
+  return { metaCampaignId: campaign.id, metaAdId: ad.id, metaLeadFormId: leadFormId };
 }
 
 export type MetaCampaignInsights = { spend: number; impressions: number; clicks: number; leads: number; frequency: number };
@@ -268,6 +268,36 @@ export async function fetchCampaignInsights(metaCampaignId: string, datePreset: 
     frequency: Number(row.frequency ?? 0),
     leads: Number(leadAction?.value ?? 0),
   };
+}
+
+export type MetaAdStatus = { effectiveStatus: string; rejectionReason?: string };
+
+/**
+ * Checks whether Meta has actually approved the ad for delivery.
+ * effective_status covers review outcomes Meta doesn't otherwise surface
+ * anywhere in insights -- a DISAPPROVED ad just shows up as zero spend/leads
+ * forever unless something explicitly checks this. effective_status itself
+ * is a confirmed, stable Graph API field; issues_info's exact per-entry
+ * shape is not (Meta's docs list it as an untyped list), so the rejection
+ * text is extracted defensively and may need adjusting once a real
+ * disapproval is seen.
+ */
+export async function fetchAdStatus(metaAdId: string): Promise<MetaAdStatus> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const result = await metaRequest<{ effective_status?: string; issues_info?: Array<Record<string, unknown>> }>(
+    `/${metaAdId}`,
+    credentials.accessToken,
+    { params: { fields: "effective_status,issues_info" } },
+  );
+
+  const firstIssue = result.issues_info?.[0];
+  const rejectionReason = firstIssue
+    ? String(firstIssue.error_summary ?? firstIssue.error_message ?? firstIssue.title ?? JSON.stringify(firstIssue))
+    : undefined;
+
+  return { effectiveStatus: result.effective_status ?? "UNKNOWN", rejectionReason };
 }
 
 export type MetaLead = { metaLeadId: string; fullName: string; email: string; phone: string; receivedAt: string };

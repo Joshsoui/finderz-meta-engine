@@ -27,9 +27,16 @@ export const campaigns = sqliteTable(
     otysVacancyId: text("otys_vacancy_id"),
     qualityLeads: integer("quality_leads").notNull().default(0),
     metaCampaignId: text("meta_campaign_id"),
+    metaAdId: text("meta_ad_id"),
     metaLeadFormId: text("meta_lead_form_id"),
     /** When the automation last increased this campaign's budget -- enforces a cooldown so a healthy campaign isn't rescaled every 15-minute monitor cycle. */
     budgetScaledAt: text("budget_scaled_at"),
+    /** Expected campaign duration in days, used to pace the lifetime budget cap into a daily_budget for Meta -- most vacancy campaigns run 1-2 weeks, but a long-running one needs a much bigger number here. */
+    campaignDurationDays: integer("campaign_duration_days").notNull().default(10),
+    /** Set once, the first time a campaign goes live -- used to time the periodic creative-freshness nudge on long-running campaigns. */
+    liveSince: text("live_since"),
+    /** When the periodic "check the creative" nudge last fired for this campaign. */
+    lastCreativeCheckAt: text("last_creative_check_at"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -94,6 +101,15 @@ export const leads = sqliteTable(
   },
   (table) => [index("idx_leads_campaign_received").on(table.campaignId, table.receivedAt)]
 );
+
+/** Single-row table (id always "meta") tracking whether the Meta API integration is actually working, not just configured -- an expired token or a broken call would otherwise only show up in server logs. */
+export const metaSyncHealth = sqliteTable("meta_sync_health", {
+  id: text("id").primaryKey(),
+  lastSuccessAt: text("last_success_at"),
+  lastErrorAt: text("last_error_at"),
+  lastErrorMessage: text("last_error_message"),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+});
 
 export const optimizationActions = sqliteTable(
   "optimization_actions",

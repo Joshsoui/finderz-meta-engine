@@ -6,12 +6,17 @@ export type MetaStatus = {
   configured: boolean;
   services: { adsManager: boolean; leadForms: boolean; imageGeneration: boolean };
   mode: "connected" | "sandbox";
+  /** False once the monitor has seen several consecutive Meta API failures in a row (expired token, revoked access, ...) -- distinct from "not configured at all". */
+  healthy: boolean;
+  lastErrorMessage: string | null;
 };
 
 const SANDBOX_STATUS: MetaStatus = {
   configured: false,
   services: { adsManager: false, leadForms: false, imageGeneration: false },
   mode: "sandbox",
+  healthy: true,
+  lastErrorMessage: null,
 };
 
 /** Reflects whether a real Meta Ads connection is configured (env vars set), or still sandbox. */

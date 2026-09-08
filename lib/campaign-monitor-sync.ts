@@ -1,8 +1,27 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { campaigns, leads, metricSnapshots, optimizationActions } from "@/db/schema";
+import { campaigns, leads, metaSyncHealth, metricSnapshots, optimizationActions } from "@/db/schema";
 import { deriveDailyBudgetCents, evaluateCampaign } from "@/lib/campaign-engine";
-import { fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
+import { fetchAdStatus, fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
+
+async function recordMetaSyncResult(db: Awaited<ReturnType<typeof getDb>>, error?: unknown) {
+  const now = new Date().toISOString();
+  const [existing] = await db.select().from(metaSyncHealth).where(eq(metaSyncHealth.id, "meta")).limit(1);
+  if (error) {
+    await db
+      .insert(metaSyncHealth)
+      .values({ id: "meta", lastErrorAt: now, lastErrorMessage: error instanceof Error ? error.message : String(error), consecutiveFailures: 1 })
+      .onConflictDoUpdate({
+        target: metaSyncHealth.id,
+        set: { lastErrorAt: now, lastErrorMessage: error instanceof Error ? error.message : String(error), consecutiveFailures: (existing?.consecutiveFailures ?? 0) + 1 },
+      });
+  } else {
+    await db
+      .insert(metaSyncHealth)
+      .values({ id: "meta", lastSuccessAt: now, consecutiveFailures: 0 })
+      .onConflictDoUpdate({ target: metaSyncHealth.id, set: { lastSuccessAt: now, consecutiveFailures: 0 } });
+  }
+}
 
 export async function runCampaignMonitor(): Promise<{ evaluated: number; actionsApplied: number }> {
   const db = await getDb();
@@ -10,9 +29,35 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
   const credentials = getMetaCredentials();
 
   let actionsApplied = 0;
+  let anyMetaCallSucceeded = false;
+  let lastMetaError: unknown;
 
   for (const campaign of liveCampaigns) {
     try {
+      if (credentials && campaign.metaAdId) {
+        // Check delivery status before spending another API call on insights
+        // -- a disapproved ad shows zero spend/leads forever otherwise, with
+        // nothing telling the marketer *why* nothing is happening.
+        const adStatus = await fetchAdStatus(campaign.metaAdId);
+        anyMetaCallSucceeded = true;
+        if (adStatus.effectiveStatus === "DISAPPROVED") {
+          if (campaign.status !== "attention") {
+            await db.update(campaigns).set({ status: "attention", updatedAt: new Date().toISOString() }).where(eq(campaigns.id, campaign.id));
+            await db.insert(optimizationActions).values({
+              campaignId: campaign.id,
+              rule: "ad_rejected",
+              severity: "critical",
+              recommendation: `Meta heeft de advertentie afgekeurd${adStatus.rejectionReason ? `: ${adStatus.rejectionReason}` : ""}. Controleer de reden in Ads Manager en pas de creative of tekst aan voordat je opnieuw indient.`,
+              status: "applied",
+              createdAt: new Date().toISOString(),
+              appliedAt: new Date().toISOString(),
+            });
+            actionsApplied += 1;
+          }
+          continue;
+        }
+      }
+
       let snapshot: { spendCents: number; impressions: number; clicks: number; leads: number; frequencyHundredths: number } | undefined;
 
       if (credentials && campaign.metaCampaignId) {
@@ -22,6 +67,7 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         // assume campaigns.spentCents is the running total since launch, and
         // a "today"-scoped fetch would silently reset that total every day.
         const insights = await fetchCampaignInsights(campaign.metaCampaignId, "lifetime");
+        anyMetaCallSucceeded = true;
         const [inserted] = await db
           .insert(metricSnapshots)
           .values({
@@ -67,6 +113,19 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         ? (Date.now() - new Date(campaign.budgetScaledAt).getTime()) / 3_600_000
         : undefined;
 
+      // A brand-new campaign's leads all default to "unrated", which is not
+      // the same thing as "reviewed, and none were usable" -- treat quality
+      // as unknown (skip the low-quality guard entirely) until at least one
+      // lead has actually been reviewed, rather than reading 0 good leads as
+      // "0% quality" from the very first evaluation.
+      const campaignLeads = await db.select({ quality: leads.quality }).from(leads).where(eq(leads.campaignId, campaign.id));
+      const reviewedLeads = campaignLeads.filter((lead) => lead.quality !== "unrated");
+      const qualityLeads = reviewedLeads.length > 0 ? reviewedLeads.filter((lead) => lead.quality === "good").length : undefined;
+
+      const hoursSinceLastCreativeCheck = campaign.liveSince
+        ? (Date.now() - new Date(campaign.lastCreativeCheckAt ?? campaign.liveSince).getTime()) / 3_600_000
+        : undefined;
+
       const decision = evaluateCampaign({
         spend: snapshot.spendCents / 100,
         impressions: snapshot.impressions,
@@ -75,8 +134,9 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         frequency: snapshot.frequencyHundredths / 100,
         targetCpl: campaign.targetCplCents / 100,
         maxBudget: campaign.maxBudgetCents / 100,
-        qualityLeads: campaign.qualityLeads,
+        qualityLeads,
         hoursSinceLastBudgetScale,
+        hoursSinceLastCreativeCheck,
       });
 
       const now = new Date().toISOString();
@@ -94,8 +154,12 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         campaignUpdate.maxBudgetCents = Math.round(campaign.maxBudgetCents * (1 + decision.budgetChangePercent / 100));
         campaignUpdate.budgetScaledAt = now;
         if (credentials && campaign.metaCampaignId) {
-          await updateMetaCampaignBudget(campaign.metaCampaignId, deriveDailyBudgetCents(campaignUpdate.maxBudgetCents));
+          await updateMetaCampaignBudget(campaign.metaCampaignId, deriveDailyBudgetCents(campaignUpdate.maxBudgetCents, campaign.campaignDurationDays));
         }
+      }
+
+      if (decision.rule === "periodic_creative_check") {
+        campaignUpdate.lastCreativeCheckAt = now;
       }
 
       await db.update(campaigns).set(campaignUpdate).where(eq(campaigns.id, campaign.id));
@@ -116,7 +180,17 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
       // One campaign's Meta call failing (rate limit, expired token, ...)
       // shouldn't stop the rest of the portfolio from being evaluated.
       console.error(`Campaign monitor failed for campaign ${campaign.id}`, error);
+      lastMetaError = error;
     }
+  }
+
+  // Surface a broken Meta connection (expired token, revoked access, ...)
+  // somewhere other than server logs -- /api/meta/status reads this to warn
+  // in the UI once failures start piling up, instead of the automation
+  // silently doing nothing for days.
+  if (credentials) {
+    if (anyMetaCallSucceeded) await recordMetaSyncResult(db);
+    else if (lastMetaError) await recordMetaSyncResult(db, lastMetaError);
   }
 
   return { evaluated: liveCampaigns.length, actionsApplied };

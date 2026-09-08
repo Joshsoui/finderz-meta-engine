@@ -19,6 +19,7 @@ export type CampaignRow = {
   backgroundImageUrl: string | null;
   logoImageUrl: string | null;
   otysVacancyId: string | null;
+  campaignDurationDays: number;
 };
 
 export type Campaign = {
@@ -43,6 +44,7 @@ export type Campaign = {
   backgroundImage?: string;
   logoImage?: string;
   otysVacancyId?: string;
+  campaignDurationDays: number;
   recommendation: string;
   nextAction: string;
 };
@@ -94,6 +96,7 @@ export function rowToCampaign(row: CampaignRow): Campaign {
     backgroundImage: row.backgroundImageUrl ?? undefined,
     logoImage: row.logoImageUrl ?? undefined,
     otysVacancyId: row.otysVacancyId ?? undefined,
+    campaignDurationDays: row.campaignDurationDays,
     recommendation,
     nextAction,
   };
