@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { campaigns } from "@/db/schema";
+import { campaigns, metricSnapshots } from "@/db/schema";
 import { errorResponse } from "@/lib/api-error";
 import { generateCampaign, type VacancyInput } from "@/lib/campaign-engine";
 
@@ -17,6 +17,8 @@ type CreateCampaignInput = VacancyInput & {
   importedEffectiveStatus?: string;
   /** The real cumulative spend already on this campaign at import time, so budget tracking starts accurate instead of at 0 until the next monitor cycle. */
   importedSpentCents?: number;
+  /** The real cumulative lead count already on this campaign at import time, same reasoning as importedSpentCents. */
+  importedLeads?: number;
 };
 
 const STATUS_FROM_EFFECTIVE_STATUS: Record<string, "live" | "paused"> = { ACTIVE: "live", PAUSED: "paused" };
@@ -25,7 +27,28 @@ export async function GET() {
   try {
     const db = await getDb();
     const rows = await db.select().from(campaigns).orderBy(desc(campaigns.updatedAt)).limit(100);
-    return Response.json({ campaigns: rows });
+
+    // impressions/clicks/leads live in metricSnapshots (the monitor loop's
+    // periodic pull from Meta), not on the campaigns row itself -- without
+    // this join every campaign would show 0 leads on the dashboard
+    // regardless of how many it actually has.
+    const campaignIds = rows.map((row) => row.id);
+    const latestByCampaign = new Map<string, { impressions: number; clicks: number; leads: number }>();
+    if (campaignIds.length > 0) {
+      const snapshots = await db
+        .select({ campaignId: metricSnapshots.campaignId, impressions: metricSnapshots.impressions, clicks: metricSnapshots.clicks, leads: metricSnapshots.leads, recordedAt: metricSnapshots.recordedAt })
+        .from(metricSnapshots)
+        .where(inArray(metricSnapshots.campaignId, campaignIds))
+        .orderBy(desc(metricSnapshots.recordedAt));
+      for (const snapshot of snapshots) {
+        if (!latestByCampaign.has(snapshot.campaignId)) {
+          latestByCampaign.set(snapshot.campaignId, { impressions: snapshot.impressions, clicks: snapshot.clicks, leads: snapshot.leads });
+        }
+      }
+    }
+
+    const enriched = rows.map((row) => ({ ...row, ...(latestByCampaign.get(row.id) ?? { impressions: 0, clicks: 0, leads: 0 }) }));
+    return Response.json({ campaigns: enriched });
   } catch (error) {
     return errorResponse(error, "Campaigns unavailable");
   }
@@ -86,6 +109,22 @@ export async function POST(request: Request) {
       createdAt: now,
       updatedAt: now,
     }).returning();
+
+    // Seed a first snapshot from the real numbers at import time -- without
+    // this, the dashboard would show 0 leads for an imported campaign until
+    // the next 15-minute monitor cycle happens to run.
+    if (isImport) {
+      await db.insert(metricSnapshots).values({
+        campaignId: id,
+        spendCents: campaign.spentCents,
+        leads: Math.max(0, Math.round(input.importedLeads ?? 0)),
+        impressions: 0,
+        clicks: 0,
+        frequencyHundredths: 0,
+        recordedAt: now,
+      });
+    }
+
     return Response.json({ campaign, generated }, { status: 201 });
   } catch (error) {
     return errorResponse(error, "Campaign could not be created");

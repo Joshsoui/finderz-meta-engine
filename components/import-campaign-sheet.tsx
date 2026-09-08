@@ -11,7 +11,7 @@ import { MAX_BUDGET_SHARE } from "@/lib/campaign-engine";
 
 const euro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
-export type ImportCandidate = { metaCampaignId: string; name: string; effectiveStatus: string; spendCents: number; dailyBudgetCents?: number };
+export type ImportCandidate = { metaCampaignId: string; name: string; effectiveStatus: string; spendCents: number; dailyBudgetCents?: number; leads?: number };
 
 const DEFAULT_FEE = 7000;
 
@@ -67,6 +67,7 @@ function ImportCampaignForm({
           metaCampaignId: candidate.metaCampaignId,
           importedEffectiveStatus: candidate.effectiveStatus,
           importedSpentCents: candidate.spendCents,
+          importedLeads: candidate.leads,
         }),
       });
       const payload = await response.json() as { campaign?: CampaignRow; error?: string };

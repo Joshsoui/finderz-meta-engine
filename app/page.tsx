@@ -433,6 +433,7 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
                         effectiveStatus: campaign.effectiveStatus,
                         spendCents: Math.round(campaign.spend * 100),
                         dailyBudgetCents: campaign.dailyBudgetCents,
+                        leads: campaign.leads,
                       })}
                     >
                       Importeer

@@ -21,6 +21,9 @@ export type CampaignRow = {
   otysVacancyId: string | null;
   campaignDurationDays: number;
   metaCampaignId: string | null;
+  impressions?: number;
+  clicks?: number;
+  leads?: number;
 };
 
 export type Campaign = {
@@ -85,9 +88,9 @@ export function rowToCampaign(row: CampaignRow): Campaign {
     fee: row.feeCents / 100,
     maxBudget: row.maxBudgetCents / 100,
     spend: row.spentCents / 100,
-    impressions: 0,
-    clicks: 0,
-    leads: 0,
+    impressions: row.impressions ?? 0,
+    clicks: row.clicks ?? 0,
+    leads: row.leads ?? 0,
     targetCpl: row.targetCplCents / 100,
     usps,
     primaryText: row.primaryText,
