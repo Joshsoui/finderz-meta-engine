@@ -13,6 +13,7 @@ import { AppShell, FinderzMark } from "@/components/app-shell";
 import { CreativePreview } from "@/components/creative-preview";
 import { type ImportCandidate, ImportCampaignSheet } from "@/components/import-campaign-sheet";
 import { NewCampaignSheet } from "@/components/new-campaign-sheet";
+import { PortfolioBudgetCard } from "@/components/portfolio-budget-card";
 import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -238,9 +239,10 @@ function DailySpendCard({ isAutomatic, totalSpend, onSpendSaved }: { isAutomatic
   }
 
   return (
-    <section className="daily-spend-card">
+    <section className="daily-spend-card daily-spend-card--platform">
       <div className="daily-spend-main">
-        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Vandaag besteed · campagnes via dit platform</div>
+        <span className="scope-badge scope-badge-platform"><CircleDollarSign className="size-3" />Dit platform</span>
+        <p className="daily-spend-subheading">Vandaag besteed</p>
         {isEditing ? (
           <div className="daily-spend-edit">
             <span className="daily-spend-prefix">€</span>
@@ -267,7 +269,7 @@ function DailySpendCard({ isAutomatic, totalSpend, onSpendSaved }: { isAutomatic
           </div>
         )}
         <p className="daily-spend-hint">
-          {isAutomatic
+          Alleen de campagnes die via dit platform worden beheerd. {isAutomatic
             ? "Wordt elke 15 minuten automatisch bijgewerkt met de echte spend uit Meta -- geen handmatige invoer meer nodig."
             : "Vul hier dagelijks het totaal in dat je in Meta Ads Manager ziet — dan hoeft dit niet meer los in een sheet."}
         </p>
@@ -286,7 +288,7 @@ function DailySpendCard({ isAutomatic, totalSpend, onSpendSaved }: { isAutomatic
         </div>
       </div>
       <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Totaal · campagnes via dit platform</span>
+        <span className="daily-spend-week-label">Totaal (levensduur)</span>
         <strong className="daily-spend-week-total">{euro.format(totalSpend)}</strong>
       </div>
     </section>
@@ -318,21 +320,23 @@ function AccountSpendCard() {
   }, []);
 
   return (
-    <section className="daily-spend-card">
+    <section className="daily-spend-card daily-spend-card--account">
       <div className="daily-spend-main">
-        <div className="eyebrow"><Gauge className="size-3.5" />Heel het Meta-advertentieaccount</div>
+        <span className="scope-badge scope-badge-account"><Gauge className="size-3" />Heel Meta-account</span>
         {!summary.connected ? (
           <>
+            <p className="daily-spend-subheading">Vandaag besteed</p>
             <div className="daily-spend-display"><span className="daily-spend-amount">—</span></div>
             <p className="daily-spend-hint">Beschikbaar zodra Meta gekoppeld is. Dit laat straks het complete accountbeeld zien, óók campagnes die niet via dit platform zijn gemaakt.</p>
           </>
         ) : (
           <>
+            <p className="daily-spend-subheading">Vandaag besteed</p>
             <div className="daily-spend-display">
               <span className="daily-spend-amount">{isLoading ? "…" : euro.format(summary.today ?? 0)}</span>
-              <span className="live-pulse"><span />Hele account</span>
+              <span className="live-pulse"><span />Live uit Meta</span>
             </div>
-            <p className="daily-spend-hint">Vandaag besteed op het volledige advertentieaccount — inclusief campagnes die niet via dit platform lopen.</p>
+            <p className="daily-spend-hint">Het volledige advertentieaccount — inclusief campagnes die niet via dit platform lopen.</p>
           </>
         )}
       </div>
@@ -478,14 +482,14 @@ function MarketingTotalCard() {
   }, []);
 
   return (
-    <section className="daily-spend-card">
+    <section className="daily-spend-card daily-spend-card--total">
       <div className="daily-spend-main">
-        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Totaal marketing vandaag · Meta + Indeed</div>
+        <span className="scope-badge scope-badge-total"><CircleDollarSign className="size-3" />Totaal · Meta + Indeed</span>
         <div className="daily-spend-display">
           <span className="daily-spend-amount">{isLoading || !summary ? "…" : euro.format(summary.today.total)}</span>
         </div>
         <p className="daily-spend-hint">
-          {summary ? `Gesplitst: Meta ${euro.format(summary.today.meta)} · Indeed ${euro.format(summary.today.indeed)}` : "Alles wat vandaag is uitgegeven, over beide kanalen samen."}
+          Vandaag besteed, over beide kanalen samen. {summary ? `Meta ${euro.format(summary.today.meta)} · Indeed ${euro.format(summary.today.indeed)}.` : ""}
         </p>
       </div>
       <div className="daily-spend-week">
@@ -788,90 +792,6 @@ function PendingActionsCard() {
           })}
         </div>
       )}
-    </article>
-  );
-}
-
-function PortfolioBudgetCard() {
-  const [maxDailyBudget, setMaxDailyBudget] = useState<number>();
-  const [usedToday, setUsedToday] = useState(0);
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await fetch("/api/portfolio-settings");
-        const payload = await response.json() as { maxDailyBudget?: number; usedToday?: number; error?: string };
-        if (!response.ok || payload.maxDailyBudget === undefined) throw new Error(payload.error || "Instelling kon niet worden geladen.");
-        if (cancelled) return;
-        setMaxDailyBudget(payload.maxDailyBudget);
-        setUsedToday(payload.usedToday ?? 0);
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : "Instelling kon niet worden geladen.");
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function save() {
-    const amount = Number(draft.replace(",", "."));
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Vul een geldig bedrag in.");
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const response = await fetch("/api/portfolio-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ maxDailyBudget: amount }),
-      });
-      const payload = await response.json() as { maxDailyBudget?: number; usedToday?: number; error?: string };
-      if (!response.ok || payload.maxDailyBudget === undefined) throw new Error(payload.error || "Instelling kon niet worden opgeslagen.");
-      setMaxDailyBudget(payload.maxDailyBudget);
-      setUsedToday(payload.usedToday ?? 0);
-      setIsEditing(false);
-      toast.success("Maximaal dagbudget bijgewerkt");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Instelling kon niet worden opgeslagen.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  const usedPercent = maxDailyBudget ? Math.min((usedToday / maxDailyBudget) * 100, 100) : 0;
-
-  return (
-    <article className="panel p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="eyebrow"><ShieldCheck className="size-3.5" />Budgetgrens</div>
-          <h2 className="mt-2">Maximaal dagbudget (alle campagnes samen)</h2>
-        </div>
-      </div>
-      {isEditing ? (
-        <div className="mt-4 flex items-center gap-2">
-          <span className="daily-spend-prefix">€</span>
-          <input autoFocus className="content-input" inputMode="decimal" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void save()} placeholder="350" />
-          <button className="primary-button" onClick={save} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Opslaan</button>
-          <button className="secondary-button" onClick={() => setIsEditing(false)}>Annuleren</button>
-        </div>
-      ) : (
-        <div className="mt-4 flex items-end justify-between">
-          <div><span className="text-2xl font-semibold text-white">{isLoading ? "…" : euro.format(usedToday)}</span><span className="ml-1 text-sm text-[#6f8798]">/ {isLoading ? "…" : euro.format(maxDailyBudget ?? 0)} per dag</span></div>
-          <button className="secondary-button" onClick={() => { setDraft(maxDailyBudget ? String(maxDailyBudget) : ""); setIsEditing(true); }}><Pencil className="size-4" />Wijzigen</button>
-        </div>
-      )}
-      {!isEditing && <Progress value={usedPercent} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />}
-      <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de harde grens die Meta per dag mag uitgeven over alle campagnes samen. Een nieuwe campagne of budgetverhoging past zich automatisch aan deze grens aan.</p>
     </article>
   );
 }

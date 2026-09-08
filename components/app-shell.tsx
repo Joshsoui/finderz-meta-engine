@@ -13,7 +13,7 @@ import {
 import { useMetaStatus } from "@/lib/use-meta-status";
 import { Toaster, toast } from "sonner";
 
-export type NavKey = "overzicht" | "pipeline" | "creatives" | "leads" | "optimalisaties" | "automatisering" | "rapportage";
+export type NavKey = "overzicht" | "pipeline" | "creatives" | "leads" | "optimalisaties" | "automatisering" | "rapportage" | "instellingen";
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; icon: typeof LayoutDashboard; href?: string; badge?: string }> = [
   { key: "overzicht", label: "Overzicht", icon: LayoutDashboard, href: "/" },
@@ -87,8 +87,13 @@ export function AppShell({
             <SidebarGroupLabel className="px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-[#506a7c] group-data-[collapsible=icon]:hidden">Beheer</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu><SidebarMenuItem>
-                <SidebarMenuButton tooltip="Instellingen" className="h-10 text-[#91aabb] hover:bg-white/5 hover:text-white" onClick={() => toast.info("Meta-koppeling wordt actief zodra de accountgegevens zijn toegevoegd.")}>
-                  <Settings2 /><span>Instellingen</span>
+                <SidebarMenuButton
+                  asChild
+                  isActive={active === "instellingen"}
+                  tooltip="Instellingen"
+                  className="h-10 text-[#91aabb] data-[active=true]:bg-[#134b6c] data-[active=true]:text-white hover:bg-white/5 hover:text-white"
+                >
+                  <Link href="/instellingen"><Settings2 /><span>Instellingen</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem></SidebarMenu>
             </SidebarGroupContent>

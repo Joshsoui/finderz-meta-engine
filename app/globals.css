@@ -191,10 +191,21 @@ button { cursor: pointer; }
 
 .daily-spend-card {
   display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: stretch; justify-content: space-between;
-  border: 1px solid rgba(103,153,156,.28); border-radius: 1rem; padding: 1.25rem 1.4rem;
+  border: 1px solid rgba(103,153,156,.28); border-left-width: 4px; border-radius: 1rem; padding: 1.25rem 1.4rem;
   background: linear-gradient(135deg,rgba(103,153,156,.16),rgba(0,97,146,.14)); box-shadow: 0 18px 40px rgba(0,0,0,.15);
 }
+.daily-spend-card--total { border-left-color: #49b8d8; }
+.daily-spend-card--platform { border-left-color: #8fc2c5; }
+.daily-spend-card--account { border-left-color: #9aa9ea; }
+.scope-badge {
+  display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px;
+  padding: .25rem .65rem; font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
+.scope-badge-total { background: rgba(73,184,216,.18); color: #6fd0ea; }
+.scope-badge-platform { background: rgba(103,153,156,.2); color: #a6d6d9; }
+.scope-badge-account { background: rgba(111,131,216,.2); color: #b3bef0; }
 .daily-spend-main { min-width: 0; flex: 1 1 320px; }
+.daily-spend-subheading { margin-top: .7rem; color: #7f97a8; font-size: .78rem; font-weight: 600; }
 .daily-spend-display { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: .6rem; }
 .daily-spend-amount { font-size: 2.4rem; font-weight: 800; letter-spacing: -.02em; color: white; }
 .daily-spend-edit { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .6rem; }
