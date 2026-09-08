@@ -17,7 +17,10 @@ after(async () => {
   await vite.close();
 });
 
-const { generateCampaign, evaluateCampaign, MAX_BUDGET_SHARE, MIN_LEAD_QUALITY_RATIO } = await vite.ssrLoadModule("/lib/campaign-engine.ts");
+const {
+  generateCampaign, evaluateCampaign, deriveDailyBudgetCents,
+  MAX_BUDGET_SHARE, MIN_LEAD_QUALITY_RATIO, BUDGET_SCALE_COOLDOWN_HOURS, CAMPAIGN_PACING_DAYS, MIN_DAILY_BUDGET_CENTS,
+} = await vite.ssrLoadModule("/lib/campaign-engine.ts");
 
 const baseVacancy = {
   title: "Elektromonteur Infra",
@@ -180,4 +183,33 @@ test("evaluateCampaign scales the budget on a healthy CPL when lead quality hasn
   // qualityLeads omitted entirely (nobody has reviewed the leads yet) -> don't block on it.
   assert.equal(decision.rule, "healthy_cpl");
   assert.equal(decision.action, "scale_budget");
+});
+
+test("evaluateCampaign refuses to scale the budget again inside the cooldown window", () => {
+  const decision = evaluateCampaign(baseMetrics({ spend: 100, leads: 4, targetCpl: 50, hoursSinceLastBudgetScale: 1 }));
+  assert.equal(decision.rule, "budget_scale_cooldown");
+  assert.equal(decision.action, "keep_running");
+  assert.equal(decision.budgetChangePercent, 0);
+});
+
+test("evaluateCampaign scales again once the cooldown window has passed", () => {
+  const decision = evaluateCampaign(baseMetrics({
+    spend: 100, leads: 4, targetCpl: 50, hoursSinceLastBudgetScale: BUDGET_SCALE_COOLDOWN_HOURS + 1,
+  }));
+  assert.equal(decision.rule, "healthy_cpl");
+  assert.equal(decision.action, "scale_budget");
+});
+
+test("BUDGET_SCALE_COOLDOWN_HOURS is 24", () => {
+  assert.equal(BUDGET_SCALE_COOLDOWN_HOURS, 24);
+});
+
+test("deriveDailyBudgetCents paces the lifetime cap over the assumed campaign duration", () => {
+  assert.equal(deriveDailyBudgetCents(30 * 100_00), 100_00);
+  assert.equal(CAMPAIGN_PACING_DAYS, 30);
+});
+
+test("deriveDailyBudgetCents never proposes a daily budget below the safety floor", () => {
+  assert.equal(deriveDailyBudgetCents(1), MIN_DAILY_BUDGET_CENTS);
+  assert.equal(deriveDailyBudgetCents(0), MIN_DAILY_BUDGET_CENTS);
 });

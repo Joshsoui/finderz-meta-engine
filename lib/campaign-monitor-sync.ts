@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns, leads, metricSnapshots, optimizationActions } from "@/db/schema";
-import { evaluateCampaign } from "@/lib/campaign-engine";
+import { deriveDailyBudgetCents, evaluateCampaign } from "@/lib/campaign-engine";
 import { fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
 
 export async function runCampaignMonitor(): Promise<{ evaluated: number; actionsApplied: number }> {
@@ -16,11 +16,12 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
       let snapshot: { spendCents: number; impressions: number; clicks: number; leads: number; frequencyHundredths: number } | undefined;
 
       if (credentials && campaign.metaCampaignId) {
-        // Meta is connected: pull today's real numbers and record them as a
-        // fresh snapshot, so the automatisering/optimalisaties history stays
-        // an accurate log of what actually happened, not just a re-read of
-        // whatever was last there.
-        const insights = await fetchCampaignInsights(campaign.metaCampaignId, "today");
+        // Meta is connected: pull the campaign's cumulative lifetime numbers
+        // (not just "today") and record them as a fresh snapshot -- the
+        // budget-ceiling rule and the dashboard's spend/profit totals both
+        // assume campaigns.spentCents is the running total since launch, and
+        // a "today"-scoped fetch would silently reset that total every day.
+        const insights = await fetchCampaignInsights(campaign.metaCampaignId, "lifetime");
         const [inserted] = await db
           .insert(metricSnapshots)
           .values({
@@ -62,6 +63,10 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
 
       if (!snapshot) continue;
 
+      const hoursSinceLastBudgetScale = campaign.budgetScaledAt
+        ? (Date.now() - new Date(campaign.budgetScaledAt).getTime()) / 3_600_000
+        : undefined;
+
       const decision = evaluateCampaign({
         spend: snapshot.spendCents / 100,
         impressions: snapshot.impressions,
@@ -71,6 +76,7 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         targetCpl: campaign.targetCplCents / 100,
         maxBudget: campaign.maxBudgetCents / 100,
         qualityLeads: campaign.qualityLeads,
+        hoursSinceLastBudgetScale,
       });
 
       const now = new Date().toISOString();
@@ -86,12 +92,15 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         campaignUpdate.status = "attention";
       } else if (decision.action === "scale_budget") {
         campaignUpdate.maxBudgetCents = Math.round(campaign.maxBudgetCents * (1 + decision.budgetChangePercent / 100));
-        if (credentials && campaign.metaCampaignId) await updateMetaCampaignBudget(campaign.metaCampaignId, campaignUpdate.maxBudgetCents);
+        campaignUpdate.budgetScaledAt = now;
+        if (credentials && campaign.metaCampaignId) {
+          await updateMetaCampaignBudget(campaign.metaCampaignId, deriveDailyBudgetCents(campaignUpdate.maxBudgetCents));
+        }
       }
 
       await db.update(campaigns).set(campaignUpdate).where(eq(campaigns.id, campaign.id));
 
-      if (decision.rule !== "learning") {
+      if (decision.rule !== "learning" && decision.rule !== "budget_scale_cooldown") {
         await db.insert(optimizationActions).values({
           campaignId: campaign.id,
           rule: decision.rule,

@@ -1,5 +1,27 @@
 export const MAX_BUDGET_SHARE = 0.2;
 
+/** Minimum hours between two automatic budget increases on the same campaign -- without this, a campaign that stays healthy for hours would get scaled every 15-minute monitor cycle and compound far past the intended "15% at a time". */
+export const BUDGET_SCALE_COOLDOWN_HOURS = 24;
+
+/**
+ * Assumed campaign duration used to convert the lifetime budget cap
+ * (maxBudget, 20% of the fee) into the daily_budget Meta actually requires.
+ * Meta has no concept of a plain lifetime cap for this campaign type, so
+ * without this a naive integration would hand Meta the *entire* lifetime
+ * cap as its daily spend target -- exhausting the whole budget in a single
+ * day. 30 days is a reasonable default for a vacancy campaign; adjust once
+ * real campaign durations are known.
+ */
+export const CAMPAIGN_PACING_DAYS = 30;
+
+/** Meta rejects a daily_budget below its own per-currency/objective minimum; this is a conservative floor so the app fails predictably rather than silently proposing an unviable budget. Meta's actual minimum may be lower or higher -- the first real API call will confirm. */
+export const MIN_DAILY_BUDGET_CENTS = 500;
+
+/** Derives the daily_budget (cents) to send Meta from the campaign's lifetime cap. */
+export function deriveDailyBudgetCents(maxBudgetCents: number): number {
+  return Math.max(Math.ceil(maxBudgetCents / CAMPAIGN_PACING_DAYS), MIN_DAILY_BUDGET_CENTS);
+}
+
 export type VacancyInput = {
   title: string;
   location: string;
@@ -19,6 +41,8 @@ export type CampaignMetrics = {
   maxBudget: number;
   /** Cumulative leads a recruiter has manually marked as usable/qualified, out of `leads`. Optional: unknown until someone has reviewed the leads. */
   qualityLeads?: number;
+  /** Hours since the last automatic budget increase on this campaign. Undefined/omitted means it has never been scaled. */
+  hoursSinceLastBudgetScale?: number;
 };
 
 export const MIN_LEAD_QUALITY_RATIO = 0.5;
@@ -132,6 +156,15 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
         severity: "attention",
         action: "keep_running",
         recommendation: "CPL is goed, maar minder dan de helft van de leads is bruikbaar. Niet opschalen; pas eerst de doelgroep of het formulier aan.",
+        budgetChangePercent: 0,
+      };
+    }
+    if (metrics.hoursSinceLastBudgetScale !== undefined && metrics.hoursSinceLastBudgetScale < BUDGET_SCALE_COOLDOWN_HOURS) {
+      return {
+        rule: "budget_scale_cooldown",
+        severity: "info",
+        action: "keep_running",
+        recommendation: `CPL is nog steeds gezond, maar het budget is minder dan ${BUDGET_SCALE_COOLDOWN_HOURS} uur geleden al verhoogd. Wacht de afkoelperiode af voordat er opnieuw wordt geschaald.`,
         budgetChangePercent: 0,
       };
     }

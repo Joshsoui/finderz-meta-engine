@@ -25,6 +25,7 @@ const RULE_LABEL: Record<string, string> = {
   creative_fatigue: "Creative fatigue",
   low_lead_quality: "Lage leadkwaliteit",
   healthy_cpl: "Gezonde CPL",
+  budget_scale_cooldown: "Budget recent al verhoogd",
   learning: "Nog aan het leren",
 };
 

@@ -46,7 +46,7 @@ const RULES = [
   {
     icon: TrendingUp,
     title: "Gecontroleerd schalen",
-    text: "Verhoogt het dagbudget met maximaal 15% zodra de CPL binnen doel blijft én de leadkwaliteit op orde is.",
+    text: "Verhoogt het dagbudget met maximaal 15% zodra de CPL binnen doel blijft én de leadkwaliteit op orde is -- maximaal 1× per 24 uur per campagne.",
   },
 ] as const;
 

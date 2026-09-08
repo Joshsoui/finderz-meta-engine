@@ -28,6 +28,8 @@ export const campaigns = sqliteTable(
     qualityLeads: integer("quality_leads").notNull().default(0),
     metaCampaignId: text("meta_campaign_id"),
     metaLeadFormId: text("meta_lead_form_id"),
+    /** When the automation last increased this campaign's budget -- enforces a cooldown so a healthy campaign isn't rescaled every 15-minute monitor cycle. */
+    budgetScaledAt: text("budget_scaled_at"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

@@ -1,0 +1,1 @@
+ALTER TABLE `campaigns` ADD `budget_scaled_at` text;

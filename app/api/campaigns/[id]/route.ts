@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
 import { errorResponse } from "@/lib/api-error";
+import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
 import { createMetaCampaign, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
 
 const CAMPAIGN_STATUSES = ["draft", "live", "attention", "paused", "completed"] as const;
@@ -66,10 +67,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       const origin = new URL(request.url).origin;
       const toAbsolute = (url: string) => (url.startsWith("http") ? url : `${origin}${url}`);
+      // maxBudgetCents is a lifetime cap (20% of the fee), not a daily
+      // spend target -- Meta's daily_budget field needs the latter, so it's
+      // derived rather than passed straight through (see campaign-engine.ts).
       const { metaCampaignId, metaLeadFormId } = await createMetaCampaign({
         title: existing.title,
         location: existing.location,
-        dailyBudgetCents: update.maxBudgetCents ?? existing.maxBudgetCents,
+        dailyBudgetCents: deriveDailyBudgetCents(update.maxBudgetCents ?? existing.maxBudgetCents),
         primaryText: update.primaryText ?? existing.primaryText,
         headline: update.headline ?? existing.headline,
         description: update.descriptionText ?? existing.descriptionText,
