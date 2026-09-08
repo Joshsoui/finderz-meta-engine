@@ -85,8 +85,27 @@ async function resolveGeoTargeting(accessToken: string, location: string) {
   return { countries: ["NL"] };
 }
 
+/**
+ * Page-scoped write endpoints (like creating a lead form) reject the System
+ * User's own access token with "(#190) This method must be called with a
+ * Page Access Token" -- confirmed directly against the real API. The Page
+ * Access Token itself has to be fetched via /me/accounts (a direct
+ * /{page_id}?fields=access_token call is rejected for the same reason
+ * fetchAdStatus-style plain page reads are), then used in place of the
+ * System User token for this one call.
+ */
+async function fetchPageAccessToken(credentials: MetaCredentials): Promise<string> {
+  const result = await metaRequest<{ data?: Array<{ id: string; access_token: string }> }>("/me/accounts", credentials.accessToken, {
+    params: { fields: "access_token" },
+  });
+  const page = result.data?.find((entry) => entry.id === credentials.pageId);
+  if (!page) throw new Error(`System user does not manage page ${credentials.pageId} (or it wasn't returned by /me/accounts)`);
+  return page.access_token;
+}
+
 async function createLeadForm(credentials: MetaCredentials, title: string, otysVacancyId?: string): Promise<string> {
-  const result = await metaRequest<{ id: string }>(`/${credentials.pageId}/leadgen_forms`, credentials.accessToken, {
+  const pageAccessToken = await fetchPageAccessToken(credentials);
+  const result = await metaRequest<{ id: string }>(`/${credentials.pageId}/leadgen_forms`, pageAccessToken, {
     method: "POST",
     params: {
       name: `${title} - sollicitatieformulier`,
@@ -95,9 +114,11 @@ async function createLeadForm(credentials: MetaCredentials, title: string, otysV
       locale: "nl_NL",
       // Invisible to the applicant, but returned with every lead fetched via
       // the API -- this is how OTYS matches an incoming lead back to the
-      // right vacancy (mirrors the "Vacancy ID" tracking parameter that was
-      // previously typed by hand into Meta's own form editor).
-      ...(otysVacancyId ? { tracking_parameters: JSON.stringify({ vacancy_id: otysVacancyId }) } : {}),
+      // right vacancy. Key and shape (an array of {key,value}, not a plain
+      // object) both confirmed against the 18 forms Finderz Keeperz already
+      // has on this page, made by hand in Meta's own form editor -- "Vacancy
+      // id" (this exact casing) is the key OTYS is expected to look for.
+      ...(otysVacancyId ? { tracking_parameters: JSON.stringify([{ key: "Vacancy id", value: otysVacancyId }]) } : {}),
     },
   });
   return result.id;
