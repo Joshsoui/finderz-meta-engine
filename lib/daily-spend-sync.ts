@@ -33,8 +33,13 @@ export async function syncAutomaticDailySpend(): Promise<void> {
     if (recent.length === 0) continue;
 
     const latestSpendCents = recent[0].spendCents;
-    const baselineSpendCents = recent.find((row) => amsterdamDate(row.recordedAt) !== today)?.spendCents ?? 0;
-    totalTodayCents += Math.max(latestSpendCents - baselineSpendCents, 0);
+    const baselineRow = recent.find((row) => amsterdamDate(row.recordedAt) !== today);
+    // No snapshot from before today yet (e.g. the campaign was just imported or
+    // just went live) -- we can't tell how much of its lifetime total is
+    // "today's" portion, so skip it rather than counting the whole lifetime
+    // spend as today's. It starts contributing once a prior-day snapshot exists.
+    if (!baselineRow) continue;
+    totalTodayCents += Math.max(latestSpendCents - baselineRow.spendCents, 0);
   }
 
   const now = new Date().toISOString();
