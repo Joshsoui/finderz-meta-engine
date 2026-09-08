@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, ImageIcon, LoaderCircle } from "lucide-react";
+import { Download, ImageIcon, LoaderCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { CreativePreview } from "@/components/creative-preview";
@@ -12,8 +12,9 @@ import {
   CREATIVE_DIMENSIONS, downloadCreative, type CreativeFormat,
 } from "@/lib/creative-renderer";
 
-function CreativeCard({ campaign }: { campaign: Campaign }) {
+function CreativeCard({ campaign, onDelete }: { campaign: Campaign; onDelete: (id: string) => void }) {
   const [format, setFormat] = useState<CreativeFormat>("1:1");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function exportCreative() {
     try {
@@ -21,6 +22,21 @@ function CreativeCard({ campaign }: { campaign: Campaign }) {
       toast.success(`${CREATIVE_DIMENSIONS[format].label} gedownload`);
     } catch {
       toast.error("De advertentie kon niet worden geëxporteerd.");
+    }
+  }
+
+  async function deleteCampaign() {
+    if (!window.confirm(`"${campaign.title}" definitief verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}`, { method: "DELETE" });
+      const payload = await response.json() as { deleted?: boolean; error?: string };
+      if (!response.ok || !payload.deleted) throw new Error(payload.error || "Campagne kon niet worden verwijderd.");
+      toast.success("Campagne verwijderd");
+      onDelete(campaign.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Campagne kon niet worden verwijderd.");
+      setIsDeleting(false);
     }
   }
 
@@ -32,6 +48,11 @@ function CreativeCard({ campaign }: { campaign: Campaign }) {
           <h2>{campaign.title}</h2>
           <p className="mt-1 text-sm text-[#6f8798]">{campaign.location}</p>
         </div>
+        {campaign.status !== "live" && (
+          <button className="secondary-button" disabled={isDeleting} onClick={() => void deleteCampaign()} title="Verwijder deze campagne">
+            {isDeleting ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+          </button>
+        )}
       </div>
       <div className="space-y-4 p-5">
         <div className="format-switch" aria-label="Advertentieformaat">
@@ -75,6 +96,10 @@ export default function CreativesPage() {
     };
   }, []);
 
+  function removeCampaign(id: string) {
+    setCampaigns((current) => current.filter((campaign) => campaign.id !== id));
+  }
+
   return (
     <AppShell active="creatives" title="Creatives" subtitle="Alle advertentie-creatives per campagne, in elk formaat te downloaden">
       {isLoading ? (
@@ -83,7 +108,7 @@ export default function CreativesPage() {
         <p className="py-24 text-center text-sm text-[#7f97a8]">Nog geen campagnes met een creative.</p>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {campaigns.map((campaign) => <CreativeCard key={campaign.id} campaign={campaign} />)}
+          {campaigns.map((campaign) => <CreativeCard key={campaign.id} campaign={campaign} onDelete={removeCampaign} />)}
         </div>
       )}
     </AppShell>

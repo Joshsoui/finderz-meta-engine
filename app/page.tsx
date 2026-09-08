@@ -172,7 +172,7 @@ function formatDayLabel(date: string, today: string) {
   return new Intl.DateTimeFormat("nl-NL", { weekday: "short", day: "numeric", month: "short" }).format(new Date(year, month - 1, day));
 }
 
-function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; totalSpend: number }) {
+function DailySpendCard({ isAutomatic, totalSpend, onSpendSaved }: { isAutomatic: boolean; totalSpend: number; onSpendSaved?: () => void }) {
   const [today, setToday] = useState("");
   const [entries, setEntries] = useState<DailySpendEntry[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -228,6 +228,7 @@ function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; tot
       setEntries((current) => [saved, ...current.filter((entry) => entry.date !== saved.date)].sort((a, b) => b.date.localeCompare(a.date)));
       setIsEditing(false);
       toast.success("Dagtotaal bijgewerkt");
+      onSpendSaved?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Dagtotaal kon niet worden opgeslagen.");
     } finally {
@@ -406,7 +407,7 @@ type IndeedCampaign = {
   totalSpendCents: number;
 };
 
-function IndeedSpendCard() {
+function IndeedSpendCard({ onSpendSaved }: { onSpendSaved?: () => void }) {
   const [today, setToday] = useState("");
   const [campaigns, setCampaigns] = useState<IndeedCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -475,6 +476,7 @@ function IndeedSpendCard() {
       }));
       setEditingId(null);
       toast.success("Indeed-spend bijgewerkt");
+      onSpendSaved?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Indeed-spend kon niet worden opgeslagen.");
     } finally {
@@ -800,6 +802,10 @@ export default function Home() {
   const [campaignHistory, setCampaignHistory] = useState<HistoryPoint[]>([]);
   const [placements, setPlacements] = useState<PlacementBreakdown[]>([]);
   const [placementsConnected, setPlacementsConnected] = useState(false);
+  // Bumped whenever Meta or Indeed daily spend is saved, so the combined
+  // MarketingTotalCard (which only fetches once on mount) refetches instead
+  // of showing a stale total from before that edit.
+  const [spendVersion, setSpendVersion] = useState(0);
   const selected = campaigns.find((campaign) => campaign.id === selectedId);
   const totals = useMemo(() => {
     const spend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
@@ -1132,13 +1138,13 @@ export default function Home() {
       subtitle="Vrijdag 5 september · laatste analyse 2 min geleden"
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
-          <MarketingTotalCard />
+          <MarketingTotalCard key={spendVersion} />
 
-          <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} />
+          <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
           <AccountSpendCard />
 
-          <IndeedSpendCard />
+          <IndeedSpendCard onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
           <PendingActionsCard />
 
