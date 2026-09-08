@@ -1,0 +1,1 @@
+ALTER TABLE `pipeline_vacancies` ADD `otys_vacancy_id` text;

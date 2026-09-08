@@ -28,6 +28,7 @@ type PipelineVacancy = {
   salary: string;
   description: string;
   feeCents: number | null;
+  otysVacancyId: string | null;
   status: PipelineStatus;
   campaignId: string | null;
   firstSeenAt: string;
@@ -160,6 +161,7 @@ function VacancyCard({
               salary: vacancy.salary,
               description: vacancy.description,
               fee: vacancy.feeCents ? String(vacancy.feeCents / 100) : undefined,
+              otysVacancyId: vacancy.otysVacancyId ?? undefined,
             }}
             trigger={<button className="primary-button"><Sparkles className="size-4" />Start campagne</button>}
             onCreate={(campaign) => onCampaignCreated(vacancy.id, campaign)}

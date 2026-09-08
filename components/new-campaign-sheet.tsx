@@ -21,6 +21,7 @@ export type NewCampaignInitialValues = {
   salary?: string;
   description?: string;
   fee?: string;
+  otysVacancyId?: string;
 };
 
 export function NewCampaignSheet({
@@ -38,7 +39,7 @@ export function NewCampaignSheet({
   const [description, setDescription] = useState(
     initialValues?.description ?? "Werk zelfstandig op locatie, los technische storingen op en onderhoud installaties. Mbo 2 elektrotechniek, rijbewijs B en klantgerichte instelling."
   );
-  const [otysVacancyId, setOtysVacancyId] = useState("");
+  const [otysVacancyId, setOtysVacancyId] = useState(initialValues?.otysVacancyId ?? "");
   const [logoImage, setLogoImage] = useState<string>();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);

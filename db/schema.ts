@@ -61,6 +61,8 @@ export const pipelineVacancies = sqliteTable(
     salary: text("salary").notNull().default(""),
     description: text("description").notNull().default(""),
     feeCents: integer("fee_cents"),
+    /** OTYS vacancy identifier, once the pipeline is fed by the OTYS API instead of scraping -- carried through to a created campaign's own otysVacancyId so lead matching needs no manual copy-paste. */
+    otysVacancyId: text("otys_vacancy_id"),
     status: text("status", { enum: ["new", "campaign_created", "dismissed"] }).notNull().default("new"),
     campaignId: text("campaign_id").references(() => campaigns.id),
     firstSeenAt: text("first_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
