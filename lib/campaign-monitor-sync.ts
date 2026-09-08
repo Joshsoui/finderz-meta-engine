@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns, leads, metaSyncHealth, metricSnapshots, optimizationActions } from "@/db/schema";
+import { syncAccountSpendSummary } from "@/lib/account-spend-sync";
 import { evaluateCampaign } from "@/lib/campaign-engine";
 import { syncAutomaticDailySpend } from "@/lib/daily-spend-sync";
 import { fetchAdStatus, fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
@@ -217,6 +218,15 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
     // reads from metricSnapshots already recorded above, so this stays
     // accurate even if a single campaign's insights call failed this cycle.
     await syncAutomaticDailySpend();
+    try {
+      // Account-level totals cover the whole ad account (including campaigns
+      // made directly in Ads Manager, outside this platform) -- a separate
+      // call from the per-campaign work above, so its failure (e.g. a
+      // missing permission) shouldn't be allowed to skip everything else.
+      await syncAccountSpendSummary();
+    } catch (error) {
+      console.error("Account-wide spend sync failed", error);
+    }
   }
 
   return { evaluated: liveCampaigns.length, actionsApplied };

@@ -238,7 +238,7 @@ function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; tot
   return (
     <section className="daily-spend-card">
       <div className="daily-spend-main">
-        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Vandaag besteed aan campagnes</div>
+        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Vandaag besteed · campagnes via dit platform</div>
         {isEditing ? (
           <div className="daily-spend-edit">
             <span className="daily-spend-prefix">€</span>
@@ -284,8 +284,63 @@ function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; tot
         </div>
       </div>
       <div className="daily-spend-week">
-        <span className="daily-spend-week-label">In totaal (alle campagnes)</span>
+        <span className="daily-spend-week-label">Totaal · campagnes via dit platform</span>
         <strong className="daily-spend-week-total">{euro.format(totalSpend)}</strong>
+      </div>
+    </section>
+  );
+}
+
+type AccountSpendSummary = { connected: boolean; today?: number; last7d?: number; lifetime?: number; updatedAt?: string | null };
+
+function AccountSpendCard() {
+  const [summary, setSummary] = useState<AccountSpendSummary>({ connected: false });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/meta/account-spend");
+        const payload = await response.json() as AccountSpendSummary & { error?: string };
+        if (response.ok && !cancelled) setSummary(payload);
+      } catch {
+        // The dashboard still works without this card; fail quietly.
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="daily-spend-card">
+      <div className="daily-spend-main">
+        <div className="eyebrow"><Gauge className="size-3.5" />Heel het Meta-advertentieaccount</div>
+        {!summary.connected ? (
+          <>
+            <div className="daily-spend-display"><span className="daily-spend-amount">—</span></div>
+            <p className="daily-spend-hint">Beschikbaar zodra Meta gekoppeld is. Dit laat straks het complete accountbeeld zien, óók campagnes die niet via dit platform zijn gemaakt.</p>
+          </>
+        ) : (
+          <>
+            <div className="daily-spend-display">
+              <span className="daily-spend-amount">{isLoading ? "…" : euro.format(summary.today ?? 0)}</span>
+              <span className="live-pulse"><span />Hele account</span>
+            </div>
+            <p className="daily-spend-hint">Vandaag besteed op het volledige advertentieaccount — inclusief campagnes die niet via dit platform lopen.</p>
+          </>
+        )}
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">Laatste 7 dagen</span>
+        <strong className="daily-spend-week-total">{summary.connected ? euro.format(summary.last7d ?? 0) : "—"}</strong>
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">Totaal (levensduur account)</span>
+        <strong className="daily-spend-week-total">{summary.connected ? euro.format(summary.lifetime ?? 0) : "—"}</strong>
       </div>
     </section>
   );
@@ -805,6 +860,8 @@ export default function Home() {
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
           <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} />
+
+          <AccountSpendCard />
 
           <PendingActionsCard />
 

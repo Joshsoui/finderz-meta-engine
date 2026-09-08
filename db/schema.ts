@@ -134,3 +134,19 @@ export const portfolioSettings = sqliteTable("portfolio_settings", {
   maxDailyBudgetCents: integer("max_daily_budget_cents").notNull().default(35000),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * Single-row table (id always "meta") caching the whole Meta ad account's
+ * spend -- unlike campaigns.spentCents, which only ever covers campaigns
+ * this platform itself created, this covers every campaign in the account,
+ * including ones made directly in Ads Manager before (or outside of) this
+ * platform. Synced from Meta's account-level insights during the 15-minute
+ * monitor cycle, not fetched per page load.
+ */
+export const accountSpendSummary = sqliteTable("account_spend_summary", {
+  id: text("id").primaryKey(),
+  todayCents: integer("today_cents").notNull().default(0),
+  last7dCents: integer("last_7d_cents").notNull().default(0),
+  lifetimeCents: integer("lifetime_cents").notNull().default(0),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

@@ -319,6 +319,39 @@ export async function fetchPlacementBreakdown(metaCampaignId: string): Promise<M
   });
 }
 
+export type MetaAccountSpendSummary = { todaySpend: number; last7dSpend: number; lifetimeSpend: number };
+
+/**
+ * Fetches spend for the whole ad account, not just campaigns this platform
+ * created -- unlike fetchCampaignInsights, which only ever sees campaigns
+ * this app itself made (it needs a metaCampaignId to know what to ask for),
+ * this reads account-level insights so a campaign made directly in Ads
+ * Manager (outside this platform) is still counted. Three separate requests
+ * because Meta's insights endpoint takes one date_preset per call.
+ */
+export async function fetchAccountSpendSummary(): Promise<MetaAccountSpendSummary> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+  const { accessToken, adAccountId } = credentials;
+
+  async function fetchSpend(datePreset: string): Promise<number> {
+    const result = await metaRequest<{ data?: Array<{ spend?: string }> }>(
+      `/act_${adAccountId}/insights`,
+      accessToken,
+      { params: { fields: "spend", date_preset: datePreset } },
+    );
+    return Number(result.data?.[0]?.spend ?? 0);
+  }
+
+  const [todaySpend, last7dSpend, lifetimeSpend] = await Promise.all([
+    fetchSpend("today"),
+    fetchSpend("last_7d"),
+    fetchSpend("lifetime"),
+  ]);
+
+  return { todaySpend, last7dSpend, lifetimeSpend };
+}
+
 export type MetaAdStatus = { effectiveStatus: string; rejectionReason?: string };
 
 /**
