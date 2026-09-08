@@ -4,7 +4,7 @@ import { campaigns, leads, metaSyncHealth, metricSnapshots, optimizationActions 
 import { syncAccountSpendSummary } from "@/lib/account-spend-sync";
 import { evaluateCampaign } from "@/lib/campaign-engine";
 import { syncAutomaticDailySpend } from "@/lib/daily-spend-sync";
-import { fetchAdStatus, fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
+import { fetchAdStatus, fetchCampaignInsights, fetchLeadFormIdForCampaign, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
 
 async function recordMetaSyncResult(db: Awaited<ReturnType<typeof getDb>>, error?: unknown) {
   const now = new Date().toISOString();
@@ -84,11 +84,27 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
           .returning();
         snapshot = inserted;
 
-        if (campaign.metaLeadFormId) {
+        let leadFormId = campaign.metaLeadFormId;
+        if (!leadFormId) {
+          // A campaign imported from Ads Manager before this recorded
+          // metaLeadFormId at import time never got one -- self-heal it here
+          // so leads start flowing without needing a re-import.
+          try {
+            const discovered = await fetchLeadFormIdForCampaign(campaign.metaCampaignId);
+            if (discovered) {
+              leadFormId = discovered;
+              await db.update(campaigns).set({ metaLeadFormId: discovered }).where(eq(campaigns.id, campaign.id));
+            }
+          } catch (error) {
+            console.error(`Could not discover lead form for campaign ${campaign.id}`, error);
+          }
+        }
+
+        if (leadFormId) {
           // New leads only add rows (never overwrite a quality rating a
           // recruiter already set), so skip duplicates by metaLeadId rather
           // than upserting.
-          const newLeads = await fetchNewLeads(campaign.metaLeadFormId);
+          const newLeads = await fetchNewLeads(leadFormId);
           for (const lead of newLeads) {
             await db
               .insert(leads)

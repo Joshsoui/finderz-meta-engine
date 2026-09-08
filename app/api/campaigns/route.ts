@@ -1,8 +1,9 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { campaigns, metricSnapshots } from "@/db/schema";
+import { campaigns, leads, metricSnapshots } from "@/db/schema";
 import { errorResponse } from "@/lib/api-error";
 import { generateCampaign, type VacancyInput } from "@/lib/campaign-engine";
+import { fetchLeadFormIdForCampaign, fetchNewLeads, getMetaCredentials } from "@/lib/meta-client";
 
 type CreateCampaignInput = VacancyInput & {
   usps?: [string, string, string];
@@ -123,6 +124,32 @@ export async function POST(request: Request) {
         frequencyHundredths: 0,
         recordedAt: now,
       });
+
+      // A campaign made outside this platform never had its lead form id
+      // recorded anywhere -- the aggregate lead *count* is seeded above, but
+      // without also finding the real form and pulling the actual lead
+      // records (name/email/phone), the Leads page would stay empty for an
+      // imported campaign even though the count on the dashboard is right.
+      // Non-fatal: the campaign is already created at this point, and the
+      // 15-minute monitor cycle would eventually pick this up on its own
+      // once metaLeadFormId is set here anyway -- this just avoids the wait.
+      if (getMetaCredentials()) {
+        try {
+          const leadFormId = await fetchLeadFormIdForCampaign(input.metaCampaignId!);
+          if (leadFormId) {
+            await db.update(campaigns).set({ metaLeadFormId: leadFormId }).where(eq(campaigns.id, id));
+            const realLeads = await fetchNewLeads(leadFormId);
+            for (const lead of realLeads) {
+              await db
+                .insert(leads)
+                .values({ campaignId: id, metaLeadId: lead.metaLeadId, fullName: lead.fullName, email: lead.email, phone: lead.phone, receivedAt: lead.receivedAt })
+                .onConflictDoNothing();
+            }
+          }
+        } catch (error) {
+          console.error(`Could not pull real leads for imported campaign ${id}`, error);
+        }
+      }
     }
 
     return Response.json({ campaign, generated }, { status: 201 });

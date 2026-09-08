@@ -465,6 +465,32 @@ export async function fetchAdStatus(metaAdId: string): Promise<MetaAdStatus> {
   return { effectiveStatus: result.effective_status ?? "UNKNOWN", rejectionReason };
 }
 
+/**
+ * Finds the lead form attached to a campaign that already exists in Ads
+ * Manager (made outside this platform, so its metaLeadFormId was never
+ * recorded anywhere) -- checks each of its ads' creative for the
+ * lead_gen_form_id embedded in the call-to-action, the same place
+ * createMetaCampaign() puts it when this platform makes the ad itself.
+ * Confirmed field path against Meta's documented creative structure
+ * (object_story_spec.link_data.call_to_action.value.lead_gen_form_id).
+ */
+export async function fetchLeadFormIdForCampaign(metaCampaignId: string): Promise<string | undefined> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const result = await metaRequest<{
+    data?: Array<{ creative?: { object_story_spec?: { link_data?: { call_to_action?: { value?: { lead_gen_form_id?: string } } } } } }>;
+  }>(`/${metaCampaignId}/ads`, credentials.accessToken, {
+    params: { fields: "creative{object_story_spec}", limit: 25 },
+  });
+
+  for (const ad of result.data ?? []) {
+    const formId = ad.creative?.object_story_spec?.link_data?.call_to_action?.value?.lead_gen_form_id;
+    if (formId) return formId;
+  }
+  return undefined;
+}
+
 export type MetaLead = { metaLeadId: string; fullName: string; email: string; phone: string; receivedAt: string };
 
 /**
