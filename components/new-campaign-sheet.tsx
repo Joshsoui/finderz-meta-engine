@@ -185,23 +185,39 @@ export function NewCampaignSheet({
               <input className="field-input" value={salary} onChange={(event) => setSalary(event.target.value)} />
             </label>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="field-label">Verwachte plaatsingsfee
-              <div className="relative">
-                <Euro className="absolute left-3 top-3.5 size-4 text-[#6f8798]" />
-                <input className="field-input pl-9" inputMode="numeric" value={fee} onChange={(event) => setFee(event.target.value)} />
-              </div>
-            </label>
-            <label className="field-label">Verwachte looptijd (dagen)
-              <input className="field-input" inputMode="numeric" value={durationDays} onChange={(event) => setDurationDays(event.target.value)} />
-            </label>
-          </div>
+          <label className="field-label">Verwachte plaatsingsfee
+            <div className="relative">
+              <Euro className="absolute left-3 top-3.5 size-4 text-[#6f8798]" />
+              <input className="field-input" style={{ paddingLeft: "2.25rem" }} inputMode="numeric" value={fee} onChange={(event) => setFee(event.target.value)} />
+            </div>
+          </label>
           <div className="budget-preview">
             <div><span>Maximaal advertentiebudget</span><strong>{euro.format((Number(fee) || 0) * 0.2)}</strong></div>
             <span className="rule-pill">20% van fee</span>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="field-label">Verwachte looptijd (dagen)
+              <input className="field-input" inputMode="numeric" value={durationDays} onChange={(event) => setDurationDays(event.target.value)} />
+            </label>
+            <label className="field-label">Dagbudget
+              <div className="relative">
+                <Euro className="absolute left-3 top-3.5 size-4 text-[#6f8798]" />
+                <input
+                  className="field-input"
+                  style={{ paddingLeft: "2.25rem" }}
+                  inputMode="numeric"
+                  value={Math.round(deriveDailyBudgetCents(Math.round((Number(fee) || 0) * 0.2 * 100), Math.max(Number(durationDays) || DEFAULT_CAMPAIGN_DURATION_DAYS, 1)) / 100)}
+                  onChange={(event) => {
+                    const dailyBudgetCents = Math.max(Number(event.target.value) || 0, 1) * 100;
+                    const maxBudgetCents = Math.round((Number(fee) || 0) * 0.2 * 100);
+                    setDurationDays(String(Math.max(1, Math.round(maxBudgetCents / dailyBudgetCents))));
+                  }}
+                />
+              </div>
+            </label>
+          </div>
           <p className="text-xs leading-5 text-[#7f97a8]">
-            Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round((Number(fee) || 0) * 0.2 * 100), Math.max(Number(durationDays) || DEFAULT_CAMPAIGN_DURATION_DAYS, 1)) / 100)}, gespreid over de opgegeven looptijd. Loopt deze campagne langer (bijv. één die je bewust langer laat draaien), zet de looptijd dan hoger zodat het budget niet te snel opraakt.
+            Deze twee horen bij elkaar: pas je de looptijd aan, dan verandert het dagbudget mee (en andersom) — het totaal blijft {euro.format((Number(fee) || 0) * 0.2)}.
           </p>
           <label className="field-label">Vacatureomschrijving
             <textarea className="field-input min-h-32 resize-none leading-6" value={description} onChange={(event) => setDescription(event.target.value)} />

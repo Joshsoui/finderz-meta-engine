@@ -1358,16 +1358,35 @@ export default function Home() {
                         <div className="mt-6 flex items-end justify-between"><div><span className="text-2xl font-semibold text-white">{euro.format(selected.spend)}</span><span className="ml-1 text-sm text-[#6f8798]">/ {euro.format(selected.maxBudget)}</span></div><span className="text-sm font-bold text-[#73cbe5]">{Math.round(budgetUsed)}%</span></div>
                         <Progress value={budgetUsed} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />
                         <div className="mt-5 grid grid-cols-2 gap-3"><div className="budget-stat"><span>Fee</span><strong>{euro.format(selected.fee)}</strong></div><div className="budget-stat"><span>Resterend</span><strong>{euro.format(Math.max(selected.maxBudget - selected.spend, 0))}</strong></div></div>
-                        <label className="mt-5 block text-xs text-[#91aabb]">Verwachte looptijd (dagen)
-                          <input
-                            className="content-input mt-1"
-                            inputMode="numeric"
-                            value={selected.campaignDurationDays}
-                            onChange={(event) => patchSelected({ campaignDurationDays: Math.max(1, Number(event.target.value) || 1) })}
-                            onBlur={() => void persistSelected({ campaignDurationDays: selected.campaignDurationDays })}
-                          />
-                        </label>
-                        <p className="mt-2 text-xs leading-5 text-[#607b8d]">Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round(selected.maxBudget * 100), selected.campaignDurationDays) / 100)}. Een campagne die je bewust langer laat draaien, moet hier een hoger aantal dagen hebben staan.</p>
+                        <div className="mt-5 grid grid-cols-2 gap-3">
+                          <label className="block text-xs text-[#91aabb]">Verwachte looptijd (dagen)
+                            <input
+                              className="content-input mt-1"
+                              inputMode="numeric"
+                              value={selected.campaignDurationDays}
+                              onChange={(event) => patchSelected({ campaignDurationDays: Math.max(1, Number(event.target.value) || 1) })}
+                              onBlur={() => void persistSelected({ campaignDurationDays: selected.campaignDurationDays })}
+                            />
+                          </label>
+                          <label className="block text-xs text-[#91aabb]">Dagbudget
+                            <div className="relative mt-1">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#6f8798]">€</span>
+                              <input
+                                className="content-input"
+                                style={{ paddingLeft: "1.75rem" }}
+                                inputMode="numeric"
+                                value={Math.round(deriveDailyBudgetCents(Math.round(selected.maxBudget * 100), selected.campaignDurationDays) / 100)}
+                                onChange={(event) => {
+                                  const dailyBudgetCents = Math.max(Number(event.target.value) || 0, 1) * 100;
+                                  const newDuration = Math.max(1, Math.round((selected.maxBudget * 100) / dailyBudgetCents));
+                                  patchSelected({ campaignDurationDays: newDuration });
+                                }}
+                                onBlur={() => void persistSelected({ campaignDurationDays: selected.campaignDurationDays })}
+                              />
+                            </div>
+                          </label>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-[#607b8d]">Deze twee horen bij elkaar: pas je de looptijd aan, dan verandert het dagbudget mee (en andersom) — het totaal blijft {euro.format(selected.maxBudget)}.</p>
                       </div>
                     </div>
                     <div className="mt-6">
