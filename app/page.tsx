@@ -346,6 +346,125 @@ function AccountSpendCard() {
   );
 }
 
+function IndeedSpendCard() {
+  const [today, setToday] = useState("");
+  const [entries, setEntries] = useState<DailySpendEntry[]>([]);
+  const [totalCents, setTotalCents] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/indeed-spend");
+        const payload = await response.json() as { today?: string; entries?: DailySpendEntry[]; totalAmountCents?: number; error?: string };
+        if (!response.ok || !payload.today) throw new Error(payload.error || "Indeed-spend kon niet worden geladen.");
+        if (cancelled) return;
+        setToday(payload.today);
+        setEntries(payload.entries ?? []);
+        setTotalCents(payload.totalAmountCents ?? 0);
+      } catch (error) {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Indeed-spend kon niet worden geladen.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const todayEntry = entries.find((entry) => entry.date === today);
+  const weekTotal = entries.slice(0, 7).reduce((sum, entry) => sum + entry.amountCents, 0) / 100;
+
+  function startEditing() {
+    setDraft(todayEntry ? String(todayEntry.amountCents / 100).replace(".", ",") : "");
+    setIsEditing(true);
+  }
+
+  async function saveToday() {
+    const amount = Number(draft.replace(",", "."));
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error("Vul een geldig bedrag in.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/indeed-spend", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: today, amount }),
+      });
+      const payload = await response.json() as { entry?: DailySpendEntry; error?: string };
+      if (!response.ok || !payload.entry) throw new Error(payload.error || "Indeed-spend kon niet worden opgeslagen.");
+      const saved = payload.entry;
+      setEntries((current) => {
+        const previous = current.find((entry) => entry.date === saved.date);
+        setTotalCents((total) => total - (previous?.amountCents ?? 0) + saved.amountCents);
+        return [saved, ...current.filter((entry) => entry.date !== saved.date)].sort((a, b) => b.date.localeCompare(a.date));
+      });
+      setIsEditing(false);
+      toast.success("Indeed-spend bijgewerkt");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Indeed-spend kon niet worden opgeslagen.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="daily-spend-card">
+      <div className="daily-spend-main">
+        <div className="eyebrow"><BarChart3 className="size-3.5" />Vandaag besteed · Indeed</div>
+        {isEditing ? (
+          <div className="daily-spend-edit">
+            <span className="daily-spend-prefix">€</span>
+            <input
+              autoFocus
+              className="daily-spend-input"
+              inputMode="decimal"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && void saveToday()}
+              placeholder="0"
+            />
+            <button className="primary-button" onClick={saveToday} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Opslaan</button>
+            <button className="secondary-button" onClick={() => setIsEditing(false)}>Annuleren</button>
+          </div>
+        ) : (
+          <div className="daily-spend-display">
+            <span className="daily-spend-amount">{isLoading ? "…" : euro.format((todayEntry?.amountCents ?? 0) / 100)}</span>
+            <button className="secondary-button" onClick={startEditing}><Pencil className="size-4" />{todayEntry ? "Bewerken" : "Invullen"}</button>
+          </div>
+        )}
+        <p className="daily-spend-hint">
+          Indeed heeft geen automatische koppeling zoals Meta (dat vraagt een langer partnertraject bij Indeed zelf) — vul hier dagelijks in wat je in het eigen dashboard van Indeed ziet, dan staat het toch bij elkaar.
+        </p>
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">Laatste 7 dagen</span>
+        <strong className="daily-spend-week-total">{euro.format(weekTotal)}</strong>
+        <div className="daily-spend-days">
+          {entries.slice(0, 7).map((entry) => (
+            <div className="daily-spend-day" key={entry.date}>
+              <span>{formatDayLabel(entry.date, today)}</span>
+              <strong>{euro.format(entry.amountCents / 100)}</strong>
+            </div>
+          ))}
+          {!isLoading && entries.length === 0 && <p className="daily-spend-empty">Nog geen dagen ingevuld.</p>}
+        </div>
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">Totaal · sinds bijhouden</span>
+        <strong className="daily-spend-week-total">{euro.format(totalCents / 100)}</strong>
+      </div>
+    </section>
+  );
+}
+
 function PendingActionsCard() {
   const [actions, setActions] = useState<OptimizationAction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -862,6 +981,8 @@ export default function Home() {
           <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} />
 
           <AccountSpendCard />
+
+          <IndeedSpendCard />
 
           <PendingActionsCard />
 

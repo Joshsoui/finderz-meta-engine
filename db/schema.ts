@@ -86,6 +86,20 @@ export const dailySpendLog = sqliteTable("daily_spend_log", {
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+/**
+ * Same shape as dailySpendLog, but for Indeed spend -- kept as a separate
+ * table rather than a "source" column on dailySpendLog so the two never mix
+ * by accident. Indeed's own Sponsored Jobs API needs a paid partner
+ * application and charges per API call, so unlike Meta this stays manual
+ * entry only; this just gives that manual number a place to live and a
+ * history, same as Meta's daily spend did before it was automated.
+ */
+export const indeedSpendLog = sqliteTable("indeed_spend_log", {
+  date: text("date").primaryKey(), // YYYY-MM-DD, Europe/Amsterdam local date
+  amountCents: integer("amount_cents").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const leads = sqliteTable(
   "leads",
   {
