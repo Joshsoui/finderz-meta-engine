@@ -137,22 +137,22 @@ export function NewCampaignSheet({
       });
       const createPayload = await createResponse.json() as { campaign?: CampaignRow; error?: string };
       if (!createResponse.ok || !createPayload.campaign) {
-        throw new Error(createPayload.error || "De campagne kon niet worden opgeslagen.");
+        throw new Error(createPayload.error || "De advertentie kon niet worden opgeslagen.");
       }
 
       onCreate(rowToCampaign(createPayload.campaign));
       setOpen(false);
       if (backgroundImage) {
-        toast.success("Complete advertentieset gegenereerd", {
-          description: "Beeld, copy, USP's en drie exportformaten staan klaar.",
+        toast.success("Advertentie is klaar", {
+          description: "Beeld en tekst staan klaar om te bekijken, in alle formaten.",
         });
       } else {
-        toast.warning("Campagneconcept staat klaar", {
-          description: backgroundError || "Voeg de OpenAI-sleutel toe om de achtergrond te genereren.",
+        toast.warning("Advertentie staat als concept klaar", {
+          description: backgroundError || "Er kon nog geen beeld worden gemaakt — voeg de OpenAI-sleutel toe.",
         });
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Genereren is niet gelukt.");
+      toast.error(error instanceof Error ? error.message : "Het maken van de advertentie is niet gelukt.");
     } finally {
       setIsGenerating(false);
     }
@@ -161,16 +161,16 @@ export function NewCampaignSheet({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        {trigger ?? <button className="primary-button"><Plus className="size-4" />Nieuwe campagne</button>}
+        {trigger ?? <button className="primary-button"><Plus className="size-4" />Nieuwe vacature adverteren</button>}
       </SheetTrigger>
       <SheetContent className="w-full border-[#23526f] bg-[#0e324e] p-0 text-white sm:max-w-xl">
         <SheetHeader className="border-b border-white/10 px-6 py-6">
           <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]">
             <WandSparkles className="size-5" />
           </div>
-          <SheetTitle className="text-xl text-white">Campagne genereren</SheetTitle>
+          <SheetTitle className="text-xl text-white">Advertentie laten maken</SheetTitle>
           <SheetDescription className="text-[#91aabb]">
-            De vacature wordt vertaald naar doelgroep, teksten, creative en een budgetplafond van 20% van de fee.
+            Vul de vacature hieronder in — ik regel de doelgroep, de tekst, het beeld en een budget van maximaal 20% van de fee.
           </SheetDescription>
         </SheetHeader>
         <div className="scrollbar-gutter-stable scrollbar-thin flex-1 space-y-5 overflow-y-auto px-6 py-6">
@@ -201,7 +201,7 @@ export function NewCampaignSheet({
             <span className="rule-pill">20% van fee</span>
           </div>
           <p className="text-xs leading-5 text-[#7f97a8]">
-            Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round((Number(fee) || 0) * 0.2 * 100), Math.max(Number(durationDays) || DEFAULT_CAMPAIGN_DURATION_DAYS, 1)) / 100)}, gespreid over de opgegeven looptijd. Loopt de campagne langer (bijv. één die je bewust langer laat draaien), zet de looptijd dan hoger zodat het budget niet te snel opraakt.
+            Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round((Number(fee) || 0) * 0.2 * 100), Math.max(Number(durationDays) || DEFAULT_CAMPAIGN_DURATION_DAYS, 1)) / 100)}, gespreid over de opgegeven looptijd. Loopt deze advertentie langer (bijv. één die je bewust langer laat draaien), zet de looptijd dan hoger zodat het budget niet te snel opraakt.
           </p>
           <label className="field-label">Vacatureomschrijving
             <textarea className="field-input min-h-32 resize-none leading-6" value={description} onChange={(event) => setDescription(event.target.value)} />
@@ -220,8 +220,8 @@ export function NewCampaignSheet({
             <div className="flex gap-3">
               <BrainCircuit className="mt-0.5 size-5 shrink-0 text-[#5bc0df]" />
               <div>
-                <p className="text-sm font-semibold text-white">Analyse bij genereren</p>
-                <p className="mt-1 text-sm leading-6 text-[#91aabb]">Doelgroep, propositie, drie USP&apos;s, teksten, beeldbriefing en KPI-grenzen worden automatisch opgesteld.</p>
+                <p className="text-sm font-semibold text-white">Dit doe ik automatisch voor je</p>
+                <p className="mt-1 text-sm leading-6 text-[#91aabb]">Ik bepaal de doelgroep, schrijf de advertentietekst, kies drie sterke punten om te benadrukken en maak een passend beeld — helemaal klaar om te bekijken en te starten.</p>
               </div>
             </div>
           </div>
@@ -229,7 +229,7 @@ export function NewCampaignSheet({
         <div className="border-t border-white/10 p-6">
           <button className="primary-button w-full justify-center disabled:cursor-wait disabled:opacity-60" onClick={createCampaign} disabled={isGenerating || isUploadingLogo}>
             {isGenerating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {isGenerating ? "Advertentieset wordt gemaakt…" : "Analyseer en genereer"}
+            {isGenerating ? "Advertentie wordt gemaakt…" : "Maak de advertentie"}
           </button>
         </div>
       </SheetContent>

@@ -52,15 +52,15 @@ export type Campaign = {
 export function recommendationFor(status: CampaignStatus): { recommendation: string; nextAction: string } {
   switch (status) {
     case "draft":
-      return { recommendation: "Concept staat klaar. Controleer beeld en teksten voordat je publiceert naar Meta.", nextAction: "Controleer & publiceer" };
+      return { recommendation: "Deze advertentie staat klaar. Check het beeld en de tekst hiernaast, en zeg het maar wanneer ik 'm live mag zetten.", nextAction: "Start deze advertentie" };
     case "paused":
-      return { recommendation: "Campagne staat gepauzeerd.", nextAction: "Herstart campagne" };
+      return { recommendation: "Deze advertentie staat stil. Zeg het maar zodra ik 'm weer mag opstarten.", nextAction: "Herstart deze advertentie" };
     case "attention":
-      return { recommendation: "Deze campagne heeft aandacht nodig. Bekijk de prestaties.", nextAction: "Bekijk campagne" };
+      return { recommendation: "Hier heb ik jouw hulp bij nodig — bekijk hieronder wat er speelt.", nextAction: "Bekijk wat er speelt" };
     case "completed":
-      return { recommendation: "Campagne is afgerond.", nextAction: "Bekijk resultaten" };
+      return { recommendation: "Deze vacature is ingevuld. Mooi resultaat!", nextAction: "Bekijk het resultaat" };
     default:
-      return { recommendation: "Nog onvoldoende data voor een automatische aanbeveling.", nextAction: "Bekijk prestaties" };
+      return { recommendation: "Ik hou dit voor je in de gaten en grijp in zodra dat nodig is.", nextAction: "Bekijk hoe het gaat" };
   }
 }
 

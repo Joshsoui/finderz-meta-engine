@@ -48,7 +48,7 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
               campaignId: campaign.id,
               rule: "ad_rejected",
               severity: "critical",
-              recommendation: `Meta heeft de advertentie afgekeurd${adStatus.rejectionReason ? `: ${adStatus.rejectionReason}` : ""}. Controleer de reden in Ads Manager en pas de creative of tekst aan voordat je opnieuw indient.`,
+              recommendation: `Meta heeft deze advertentie geweigerd${adStatus.rejectionReason ? ` (reden: ${adStatus.rejectionReason})` : ""}. Pas het beeld of de tekst aan, dan dien ik 'm opnieuw in.`,
               status: "applied",
               createdAt: new Date().toISOString(),
               appliedAt: new Date().toISOString(),

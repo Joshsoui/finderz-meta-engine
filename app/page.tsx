@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity, AlertTriangle, ArrowUpRight, BarChart3, BrainCircuit,
+  Activity, AlertTriangle, BarChart3, BrainCircuit,
   CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
   Megaphone, MousePointerClick, Pause, Pencil, Play,
   RefreshCw, Search, ShieldCheck, Sparkles, Target, Upload,
@@ -52,13 +52,13 @@ const SEVERITY_STOPLICHT: Record<OptimizationAction["severity"], { statusClass: 
 
 const ACTIVITY_RULE_LABEL: Record<string, string> = {
   budget_ceiling: "Budgetplafond bereikt",
-  no_leads_after_spend: "Geen leads na spend",
-  cpl_above_limit: "CPL boven limiet",
-  creative_fatigue: "Creative fatigue",
-  low_lead_quality: "Lage leadkwaliteit",
+  no_leads_after_spend: "Geen sollicitaties ondanks bereik",
+  cpl_above_limit: "Sollicitaties te duur",
+  creative_fatigue: "Advertentie aan vervanging toe",
+  low_lead_quality: "Te veel onbruikbare sollicitaties",
   healthy_cpl: "Budget verhoogd",
-  ad_rejected: "Advertentie afgekeurd",
-  periodic_creative_check: "Periodieke creative-check",
+  ad_rejected: "Advertentie afgekeurd door Meta",
+  periodic_creative_check: "Check of beeld/tekst nog fris is",
 };
 
 const ACTIVITY_TONE: Record<OptimizationAction["severity"], string> = { info: "green", attention: "amber", critical: "red" };
@@ -80,8 +80,8 @@ function TrendChart({ history }: { history: HistoryPoint[] }) {
 
   if (valid.length < 2) {
     return (
-      <div className="trend-chart flex items-center justify-center" aria-label="Kosten per lead">
-        <p className="text-sm text-[#6f8798]">Nog onvoldoende meetpunten voor een trend. Komt vanzelf zodra de campagne langer draait.</p>
+      <div className="trend-chart flex items-center justify-center" aria-label="Kosten per sollicitatie">
+        <p className="text-sm text-[#6f8798]">Nog onvoldoende meetpunten voor een trend. Komt vanzelf zodra de advertentie langer draait.</p>
       </div>
     );
   }
@@ -101,7 +101,7 @@ function TrendChart({ history }: { history: HistoryPoint[] }) {
   const labelIndexes = [0, Math.floor((valid.length - 1) / 2), valid.length - 1];
 
   return (
-    <div className="trend-chart" aria-label="Kosten per lead over tijd">
+    <div className="trend-chart" aria-label="Kosten per sollicitatie over tijd">
       <div className="trend-grid" />
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-hidden="true">
         <defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1aa6d1" stopOpacity="0.3" /><stop offset="100%" stopColor="#1aa6d1" stopOpacity="0" /></linearGradient></defs>
@@ -190,7 +190,7 @@ function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; tot
   return (
     <section className="daily-spend-card">
       <div className="daily-spend-main">
-        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Vandaag besteed aan campagnes</div>
+        <div className="eyebrow"><CircleDollarSign className="size-3.5" />Vandaag besteed aan vacatures</div>
         {isEditing ? (
           <div className="daily-spend-edit">
             <span className="daily-spend-prefix">€</span>
@@ -236,7 +236,7 @@ function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; tot
         </div>
       </div>
       <div className="daily-spend-week">
-        <span className="daily-spend-week-label">In totaal (alle campagnes)</span>
+        <span className="daily-spend-week-label">In totaal (alle vacatures)</span>
         <strong className="daily-spend-week-total">{euro.format(totalSpend)}</strong>
       </div>
     </section>
@@ -396,7 +396,7 @@ function PortfolioBudgetCard() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="eyebrow"><ShieldCheck className="size-3.5" />Portfolio-limiet</div>
-          <h2 className="mt-2">Maximaal dagbudget (alle campagnes samen)</h2>
+          <h2 className="mt-2">Maximaal dagbudget (alle vacatures samen)</h2>
         </div>
       </div>
       {isEditing ? (
@@ -413,7 +413,7 @@ function PortfolioBudgetCard() {
         </div>
       )}
       {!isEditing && <Progress value={usedPercent} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />}
-      <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de harde grens die Meta per dag mag uitgeven over alle campagnes samen. Een nieuwe campagne of budgetverhoging past zich automatisch aan deze grens aan.</p>
+      <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de harde grens die Meta per dag mag uitgeven over alle vacatures samen. Een nieuwe advertentie of budgetverhoging past zich automatisch aan deze grens aan.</p>
     </article>
   );
 }
@@ -649,9 +649,9 @@ export default function Home() {
         images[format] = uploadPayload.url;
       }
 
-      patchSelected({ status: "live", recommendation: "Campagne is gestart. De eerste evaluatie volgt na voldoende bereik." });
+      patchSelected({ status: "live", recommendation: "De advertentie is live! Ik hou de eerste resultaten voor je in de gaten en laat het weten zodra er iets te melden is." });
       await persistSelected({ status: "live", finalCreativeImagesJson: JSON.stringify(images) });
-      toast.success("Campagne gestart");
+      toast.success("Advertentie is live");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Campagne kon niet live gezet worden.");
     } finally {
@@ -705,11 +705,11 @@ export default function Home() {
 
   if (!selected) {
     return (
-      <AppShell active="overzicht" title="Meta Campaign Control" headerActions={<NewCampaignSheet onCreate={addCampaign} />}>
+      <AppShell active="overzicht" title="Vacatures & Advertenties" headerActions={<NewCampaignSheet onCreate={addCampaign} />}>
         <div className="flex flex-col items-center justify-center gap-5 px-6 py-24 text-center text-white">
           <FinderzMark />
-          <h1 className="text-xl font-semibold">Nog geen campagnes</h1>
-          <p className="max-w-sm text-sm text-[#91aabb]">Maak je eerste campagne aan, of haal vacatures binnen via de <Link href="/pipeline" className="text-[#5bc0df] underline">pipeline</Link>.</p>
+          <h1 className="text-xl font-semibold">Nog geen advertenties</h1>
+          <p className="max-w-sm text-sm text-[#91aabb]">Maak je eerste advertentie aan, of haal vacatures binnen via de <Link href="/pipeline" className="text-[#5bc0df] underline">pipeline</Link>.</p>
           <NewCampaignSheet onCreate={addCampaign} />
         </div>
       </AppShell>
@@ -723,7 +723,7 @@ export default function Home() {
   return (
     <AppShell
       active="overzicht"
-      title="Meta Campaign Control"
+      title="Vacatures & Advertenties"
       subtitle="Vrijdag 5 september · laatste analyse 2 min geleden"
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
@@ -735,10 +735,10 @@ export default function Home() {
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Actieve campagnes", value: String(campaigns.filter((campaign) => campaign.status === "live").length), sub: campaigns.length + " campagnes totaal", icon: Megaphone, tone: "blue" },
-              { label: "Totale spend", value: euro.format(totals.spend), sub: "over alle campagnes", icon: CircleDollarSign, tone: "green" },
-              { label: "Nieuwe leads", value: String(totals.leads), sub: "over alle campagnes", icon: Users, tone: "amber" },
-              { label: "Gemiddelde CPL", value: euro.format(totals.cpl), sub: totals.ctr.toFixed(2).replace(".", ",") + "% gem. CTR", icon: Target, tone: "purple" },
+              { label: "Actieve vacatures", value: String(campaigns.filter((campaign) => campaign.status === "live").length), sub: campaigns.length + " vacatures totaal", icon: Megaphone, tone: "blue" },
+              { label: "Totaal uitgegeven", value: euro.format(totals.spend), sub: "over alle vacatures", icon: CircleDollarSign, tone: "green" },
+              { label: "Nieuwe sollicitaties", value: String(totals.leads), sub: "over alle vacatures", icon: Users, tone: "amber" },
+              { label: "Gem. kosten per sollicitatie", value: euro.format(totals.cpl), sub: totals.ctr.toFixed(2).replace(".", ",") + "% klikratio", icon: Target, tone: "purple" },
             ].map((metric) => (
               <article className="metric-card" key={metric.label}>
                 <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-[#7f97a8]">{metric.label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-white">{metric.value}</p></div><div className={"metric-icon metric-icon-" + metric.tone}><metric.icon className="size-[18px]" /></div></div>
@@ -750,8 +750,8 @@ export default function Home() {
           <section className="panel p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="eyebrow"><CircleDollarSign className="size-3.5" />Portfolio</div>
-                <h2 className="mt-2">Spend &amp; winst over alle campagnes</h2>
+                <div className="eyebrow"><CircleDollarSign className="size-3.5" />Alle vacatures samen</div>
+                <h2 className="mt-2">Uitgaven &amp; winst over alle vacatures</h2>
               </div>
               <ShieldCheck className="size-5 shrink-0 text-[#35b7df]" />
             </div>
@@ -765,7 +765,7 @@ export default function Home() {
                   <span className="text-sm font-bold text-[#73cbe5]">{Math.round(totals.budgetUsed)}%</span>
                 </div>
                 <Progress value={totals.budgetUsed} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />
-                <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de actuele stand over alle campagnes samen. &quot;Verwachte winst&quot; telt elke campagne mee op basis van de opgegeven fee; &quot;bevestigde winst&quot; telt alleen campagnes die op status &quot;Afgerond&quot; staan (plaatsing bevestigd). Een uitsplitsing per dag/week/maand/jaar komt zodra er live spenddata vanuit Meta binnenkomt.</p>
+                <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de actuele stand over alle vacatures samen. &quot;Verwachte winst&quot; telt elke vacature mee op basis van de opgegeven fee; &quot;bevestigde winst&quot; telt alleen vacatures die op status &quot;Afgerond&quot; staan (plaatsing bevestigd). Een uitsplitsing per dag/week/maand/jaar komt zodra er live spenddata vanuit Meta binnenkomt.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="budget-stat"><span>Totale fee</span><strong>{euro.format(totals.fee)}</strong></div>
@@ -780,12 +780,12 @@ export default function Home() {
             <div className="space-y-6">
               <article className="panel overflow-hidden">
                 <div className="panel-header">
-                  <div><div className="eyebrow"><Activity className="size-3.5" />Live overzicht</div><h2>Campagnes</h2></div>
-                  <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#0d2b45] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek campagne" /></div>
+                  <div><div className="eyebrow"><Activity className="size-3.5" />Live overzicht</div><h2>Vacatures</h2></div>
+                  <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#0d2b45] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek vacature" /></div>
                 </div>
                 <Table>
                   <TableHeader><TableRow className="border-white/8 hover:bg-transparent">
-                    <TableHead className="px-5 table-heading">Vacature</TableHead><TableHead className="table-heading">Status</TableHead><TableHead className="table-heading">Spend</TableHead><TableHead className="table-heading">Leads</TableHead><TableHead className="table-heading">CPL</TableHead><TableHead className="pr-5 text-right table-heading">Budget</TableHead>
+                    <TableHead className="px-5 table-heading">Vacature</TableHead><TableHead className="table-heading">Status</TableHead><TableHead className="table-heading">Uitgegeven</TableHead><TableHead className="table-heading">Sollicitaties</TableHead><TableHead className="table-heading">Kosten/soll.</TableHead><TableHead className="pr-5 text-right table-heading">Budget</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>{campaigns.map((campaign) => {
                     const rowCpl = campaign.leads ? campaign.spend / campaign.leads : 0;
@@ -806,7 +806,7 @@ export default function Home() {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div><div className="eyebrow"><Gauge className="size-3.5" />Geselecteerde campagne</div><h2>{selected.title}</h2><p className="mt-1 text-sm text-[#6f8798]">{selected.location}</p></div>
+                  <div><div className="eyebrow"><Gauge className="size-3.5" />Geselecteerde vacature</div><h2>{selected.title}</h2><p className="mt-1 text-sm text-[#6f8798]">{selected.location}</p></div>
                   <span className={"status status-" + selected.status}><span />{statusLabel(selected.status)}</span>
                 </div>
                 <Tabs defaultValue="performance" className="gap-0">
@@ -825,8 +825,8 @@ export default function Home() {
                     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(260px,.7fr)]">
                       <div>
                         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-                          <div><p className="text-sm text-[#718a9c]">Kosten per lead</p><div className="mt-1 flex items-baseline gap-3"><span className="text-3xl font-semibold text-white">{cpl ? euro.format(cpl) : "—"}</span>{cpl > 0 && <span className="text-sm font-semibold text-[#4fc6e9]">{Math.round((1 - cpl / selected.targetCpl) * 100)}% vs. doel</span>}</div></div>
-                          <div className="flex gap-5 text-right"><div><span className="block text-xs text-[#607b8d]">CTR</span><strong className="text-sm text-white">{ctr.toFixed(2).replace(".", ",")}%</strong></div><div><span className="block text-xs text-[#607b8d]">Klikken</span><strong className="text-sm text-white">{selected.clicks}</strong></div></div>
+                          <div><p className="text-sm text-[#718a9c]">Kosten per sollicitatie</p><div className="mt-1 flex items-baseline gap-3"><span className="text-3xl font-semibold text-white">{cpl ? euro.format(cpl) : "—"}</span>{cpl > 0 && <span className="text-sm font-semibold text-[#4fc6e9]">{Math.round((1 - cpl / selected.targetCpl) * 100)}% vs. doel</span>}</div></div>
+                          <div className="flex gap-5 text-right"><div><span className="block text-xs text-[#607b8d]">Klikratio</span><strong className="text-sm text-white">{ctr.toFixed(2).replace(".", ",")}%</strong></div><div><span className="block text-xs text-[#607b8d]">Klikken</span><strong className="text-sm text-white">{selected.clicks}</strong></div></div>
                         </div>
                         <TrendChart history={campaignHistory} />
                       </div>
@@ -844,7 +844,7 @@ export default function Home() {
                             onBlur={() => void persistSelected({ campaignDurationDays: selected.campaignDurationDays })}
                           />
                         </label>
-                        <p className="mt-2 text-xs leading-5 text-[#607b8d]">Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round(selected.maxBudget * 100), selected.campaignDurationDays) / 100)}. Een campagne die je bewust langer laat draaien, moet hier een hoger aantal dagen hebben staan.</p>
+                        <p className="mt-2 text-xs leading-5 text-[#607b8d]">Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round(selected.maxBudget * 100), selected.campaignDurationDays) / 100)}. Een advertentie die je bewust langer laat draaien, moet hier een hoger aantal dagen hebben staan.</p>
                       </div>
                     </div>
                   </TabsContent>
@@ -892,9 +892,9 @@ export default function Home() {
                   <TabsContent value="automation" className="p-5">
                     <div className="grid gap-3 md:grid-cols-3">
                       {[
-                        { icon: Target, title: "CPL-bewaking", text: "Pauzeert wanneer CPL langer dan 24 uur boven 1,5× het doel ligt." },
-                        { icon: ImageIcon, title: "Creative refresh", text: "Maakt een nieuwe variant bij frequentie boven 2,8 of dalende CTR." },
-                        { icon: TrendingUp, title: "Gecontroleerd schalen", text: "Verhoogt budget met maximaal 15% bij drie of meer kwalitatieve leads." },
+                        { icon: Target, title: "Kostenbewaking", text: "Stopt de advertentie als een sollicitatie te veel gaat kosten." },
+                        { icon: ImageIcon, title: "Fris houden", text: "Waarschuwt zodra de doelgroep de advertentie te vaak ziet of minder reageert, zodat je een nieuw beeld kunt laten maken." },
+                        { icon: TrendingUp, title: "Budget opschalen (met jouw goedkeuring)", text: "Stelt voor het budget te verhogen zodra het goed gaat — jij keurt het goed voordat er meer wordt uitgegeven." },
                       ].map((rule) => <div className="automation-card" key={rule.title}><rule.icon className="size-5 text-[#4fc6e9]" /><h3>{rule.title}</h3><p>{rule.text}</p><span><span />Actief</span></div>)}
                     </div>
                   </TabsContent>
@@ -906,23 +906,22 @@ export default function Home() {
               <article className="panel p-5">
                 <div className="flex items-start justify-between gap-4"><div><div className="eyebrow"><BrainCircuit className="size-3.5" />Automatische analyse</div><h2 className="mt-2">Aanbevolen actie</h2></div><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]"><Zap className="size-5" /></div></div>
                 <div className="mt-5 rounded-xl border border-[#206389] bg-[#13425e] p-4"><p className="text-sm leading-6 text-[#bbced9]">{selected.recommendation}</p></div>
-                {selected.status !== "completed" && (
+                {(selected.status === "draft" || selected.status === "paused") && (
                   <button className="primary-button mt-4 w-full justify-center disabled:cursor-wait disabled:opacity-60" disabled={isPublishing} onClick={() => {
-                    if (selected.status === "paused") updateSelected({ status: "draft", recommendation: "Campagne staat klaar voor een nieuwe creative en teksthoek." }, "Campagne teruggezet naar concept");
-                    else if (selected.status === "draft") void publishCampaign();
-                    else updateSelected({ maxBudget: Math.round(selected.maxBudget * 1.15) }, "Aanbevolen optimalisatie toegepast");
+                    if (selected.status === "paused") updateSelected({ status: "draft", recommendation: "Deze advertentie staat weer klaar. Wil je eerst een nieuw beeld of nieuwe tekst, of mag ik 'm meteen weer starten?" }, "Terug naar concept gezet");
+                    else void publishCampaign();
                   }}>
-                    {isPublishing ? <LoaderCircle className="size-4 animate-spin" /> : selected.status === "paused" ? <RefreshCw className="size-4" /> : selected.status === "draft" ? <Play className="size-4" /> : <ArrowUpRight className="size-4" />}
-                    {isPublishing ? "Creative wordt klaargezet…" : selected.nextAction}
+                    {isPublishing ? <LoaderCircle className="size-4 animate-spin" /> : selected.status === "paused" ? <RefreshCw className="size-4" /> : <Play className="size-4" />}
+                    {isPublishing ? "Advertentie wordt klaargezet…" : selected.nextAction}
                   </button>
                 )}
-                {selected.status !== "paused" && selected.status !== "completed" && <button className="danger-button mt-2 w-full justify-center" onClick={() => updateSelected({ status: "paused", nextAction: "Herbouw campagne" }, "Campagne gepauzeerd")}><Pause className="size-4" />Campagne pauzeren</button>}
+                {selected.status !== "paused" && selected.status !== "completed" && <button className="danger-button mt-2 w-full justify-center" onClick={() => updateSelected({ status: "paused", recommendation: "Deze advertentie staat stil. Zeg het maar zodra ik 'm weer mag opstarten.", nextAction: "Herstart deze advertentie" }, "Advertentie gestopt")}><Pause className="size-4" />Stop deze advertentie</button>}
                 {selected.status !== "completed" && (
                   <button
                     className="secondary-button mt-2 w-full justify-center"
-                    onClick={() => updateSelected({ status: "completed", recommendation: "Plaatsing bevestigd. Deze campagne telt mee in de bevestigde winst.", nextAction: "Bekijk resultaten" }, "Campagne gemarkeerd als afgerond")}
+                    onClick={() => updateSelected({ status: "completed", recommendation: "Deze vacature is ingevuld. Mooi resultaat!", nextAction: "Bekijk het resultaat" }, "Gemarkeerd als afgerond")}
                   >
-                    <CheckCircle2 className="size-4" />Markeer als afgerond (plaatsing bevestigd)
+                    <CheckCircle2 className="size-4" />Kandidaat gevonden, markeer als afgerond
                   </button>
                 )}
               </article>
@@ -930,7 +929,7 @@ export default function Home() {
               <article className="panel p-5">
                 <div className="flex items-center justify-between"><div><div className="eyebrow"><Clock3 className="size-3.5" />24/7 monitoring</div><h2 className="mt-2">Recente acties</h2></div><span className="live-pulse"><span />Live</span></div>
                 {recentActions.length === 0 ? (
-                  <p className="mt-5 text-sm text-[#7f97a8]">Nog geen automatische acties. Zodra een live campagne wordt geëvalueerd, verschijnen de resultaten hier.</p>
+                  <p className="mt-5 text-sm text-[#7f97a8]">Nog geen automatische acties. Zodra een live advertentie wordt geëvalueerd, verschijnen de resultaten hier.</p>
                 ) : (
                   <div className="mt-5 space-y-5">{recentActions.map((item) => (
                     <div className="activity-item" key={item.id}>

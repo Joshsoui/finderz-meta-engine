@@ -130,7 +130,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "budget_ceiling",
       severity: "critical",
       action: "pause",
-      recommendation: "Budgetplafond bereikt. Pauzeer de campagne om de maximale 20% van de fee niet te overschrijden.",
+      recommendation: "Ik heb deze advertentie stopgezet: het volledige budget is op. Zo blijven we netjes binnen de afgesproken 20% van de fee.",
       budgetChangePercent: 0,
     };
   }
@@ -139,7 +139,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "no_leads_after_spend",
       severity: "critical",
       action: "pause",
-      recommendation: "Voldoende bereik en spend zonder leads. Pauzeer en herbouw propositie en formulier.",
+      recommendation: "Ik heb deze advertentie stopgezet: genoeg mensen hebben 'm gezien, maar niemand solliciteerde. De tekst of het beeld sluit waarschijnlijk niet goed genoeg aan — tijd voor een andere insteek.",
       budgetChangePercent: 0,
     };
   }
@@ -148,7 +148,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "cpl_above_limit",
       severity: "critical",
       action: "pause",
-      recommendation: "CPL ligt meer dan 50% boven het doel. Pauzeer en vervang creative of doelgroepaanpak.",
+      recommendation: "Ik heb deze advertentie stopgezet: een sollicitatie kost nu een stuk meer dan we willen. Laten we een ander beeld of een andere doelgroep proberen.",
       budgetChangePercent: 0,
     };
   }
@@ -157,7 +157,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "creative_fatigue",
       severity: "attention",
       action: "refresh_creative",
-      recommendation: "Creative fatigue of lage CTR gedetecteerd. Genereer een nieuwe achtergrond en teksthoek.",
+      recommendation: "De doelgroep heeft deze advertentie al vaak gezien en reageert minder. Tijd voor een fris beeld en nieuwe tekst — dat kun je hieronder met één klik laten maken.",
       budgetChangePercent: 0,
     };
   }
@@ -167,7 +167,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
         rule: "low_lead_quality",
         severity: "attention",
         action: "keep_running",
-        recommendation: "CPL is goed, maar minder dan de helft van de leads is bruikbaar. Niet opschalen; pas eerst de doelgroep of het formulier aan.",
+        recommendation: "De kosten per sollicitatie zijn prima, maar te veel sollicitaties blijken niet bruikbaar. Ik verhoog het budget nog niet — check eerst de doelgroep of het sollicitatieformulier.",
         budgetChangePercent: 0,
       };
     }
@@ -176,7 +176,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
         rule: "budget_scale_cooldown",
         severity: "info",
         action: "keep_running",
-        recommendation: `CPL is nog steeds gezond, maar het budget is minder dan ${BUDGET_SCALE_COOLDOWN_HOURS} uur geleden al verhoogd. Wacht de afkoelperiode af voordat er opnieuw wordt geschaald.`,
+        recommendation: `Gaat nog steeds goed, maar ik heb het budget minder dan ${BUDGET_SCALE_COOLDOWN_HOURS} uur geleden al verhoogd. Ik wacht even voordat ik dat nog een keer voorstel.`,
         budgetChangePercent: 0,
       };
     }
@@ -184,7 +184,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "healthy_cpl",
       severity: "info",
       action: "scale_budget",
-      recommendation: "Campagne presteert binnen de doel-CPL met voldoende bruikbare leads. Verhoog het dagbudget gecontroleerd met maximaal 15%.",
+      recommendation: "Dit gaat goed! Sollicitaties komen binnen tegen een prima prijs. Mag ik het dagbudget met 15% verhogen, zodat we er meer uit halen?",
       budgetChangePercent: 15,
     };
   }
@@ -193,7 +193,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
       rule: "periodic_creative_check",
       severity: "info",
       action: "keep_running",
-      recommendation: `Deze campagne draait al ${Math.floor(metrics.hoursSinceLastCreativeCheck / 24)} dagen zonder dat frequentie of CTR fatigue aangaven. Controleer bij een langlopende campagne toch periodiek of beeld en tekst nog fris aanvoelen.`,
+      recommendation: `Deze advertentie draait al ${Math.floor(metrics.hoursSinceLastCreativeCheck / 24)} dagen zonder duidelijke tekenen van sleet. Geen actie nodig, maar bij een langere looptijd is het slim om af en toe zelf te checken of beeld en tekst nog fris aanvoelen.`,
       budgetChangePercent: 0,
     };
   }
@@ -201,7 +201,7 @@ export function evaluateCampaign(metrics: CampaignMetrics): OptimizationDecision
     rule: "learning",
     severity: "info",
     action: "keep_running",
-    recommendation: "Nog onvoldoende bewijs voor een wijziging. Laat de campagne doorlopen en beoordeel opnieuw na extra bereik.",
+    recommendation: "Nog te vroeg om iets te zeggen. Ik verzamel meer data en kom terug zodra er genoeg te zien is.",
     budgetChangePercent: 0,
   };
 }

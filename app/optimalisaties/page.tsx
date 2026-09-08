@@ -21,15 +21,15 @@ type OptimizationAction = {
 
 const RULE_LABEL: Record<string, string> = {
   budget_ceiling: "Budgetplafond bereikt",
-  no_leads_after_spend: "Geen leads na spend",
-  cpl_above_limit: "CPL boven limiet",
-  creative_fatigue: "Creative fatigue",
-  low_lead_quality: "Lage leadkwaliteit",
+  no_leads_after_spend: "Geen sollicitaties ondanks bereik",
+  cpl_above_limit: "Sollicitaties te duur",
+  creative_fatigue: "Advertentie aan vervanging toe",
+  low_lead_quality: "Te veel onbruikbare sollicitaties",
   healthy_cpl: "Budget verhogen",
-  ad_rejected: "Advertentie afgekeurd",
-  periodic_creative_check: "Periodieke creative-check",
+  ad_rejected: "Advertentie afgekeurd door Meta",
+  periodic_creative_check: "Check of beeld/tekst nog fris is",
   budget_scale_cooldown: "Budget recent al verhoogd",
-  learning: "Nog aan het leren",
+  learning: "Nog aan het verzamelen van data",
 };
 
 const STATUS_LABEL: Record<OptimizationAction["status"], string> = {

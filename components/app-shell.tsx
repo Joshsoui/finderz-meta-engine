@@ -19,7 +19,7 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; icon: typeof LayoutDashboar
   { key: "overzicht", label: "Overzicht", icon: LayoutDashboard, href: "/" },
   { key: "pipeline", label: "Pipeline", icon: Megaphone, href: "/pipeline" },
   { key: "creatives", label: "Creatives", icon: ImageIcon, href: "/creatives" },
-  { key: "leads", label: "Leads", icon: Users, href: "/leads" },
+  { key: "leads", label: "Sollicitaties", icon: Users, href: "/leads" },
   { key: "optimalisaties", label: "Optimalisaties", icon: BrainCircuit, href: "/optimalisaties" },
   { key: "automatisering", label: "Automatisering", icon: Zap, href: "/automatisering" },
 ];

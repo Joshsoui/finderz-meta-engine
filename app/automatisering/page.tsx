@@ -22,32 +22,32 @@ const RULES = [
   {
     icon: AlertOctagon,
     title: "Budgetplafond",
-    text: "Pauzeert direct zodra de spend 20% van de fee bereikt — dat plafond wordt nooit overschreden.",
+    text: "Stopt de advertentie direct zodra 20% van de fee is uitgegeven — dat plafond wordt nooit overschreden.",
   },
   {
     icon: ShieldAlert,
-    title: "Geen leads na spend",
-    text: "Pauzeert wanneer er bij minstens 2.000 impressies en genoeg spend nog altijd geen enkele lead is binnengekomen.",
+    title: "Geen sollicitaties ondanks bereik",
+    text: "Stopt de advertentie wanneer genoeg mensen 'm gezien hebben, maar er nog altijd niemand heeft gesolliciteerd.",
   },
   {
     icon: Target,
-    title: "CPL boven limiet",
-    text: "Pauzeert zodra de kosten per lead (bij 3 of meer leads) meer dan 50% boven de doel-CPL uitkomen.",
+    title: "Te dure sollicitaties",
+    text: "Stopt de advertentie zodra een sollicitatie structureel meer dan 50% boven de verwachte prijs uitkomt.",
   },
   {
     icon: ImageIcon,
-    title: "Creative fatigue",
-    text: "Vervangt de creative bij een frequentie boven 2,8 of een CTR onder 0,8% na voldoende bereik.",
+    title: "Fris houden",
+    text: "Waarschuwt zodra de doelgroep de advertentie te vaak ziet of er weinig op geklikt wordt, zodat je op tijd een nieuw beeld kunt laten maken.",
   },
   {
     icon: ShieldCheck,
-    title: "Lage leadkwaliteit",
-    text: "Houdt het budget vast (schaalt niet op) als minder dan de helft van de leads als bruikbaar is gemarkeerd, ook als de CPL goed is.",
+    title: "Bewaakt leadkwaliteit",
+    text: "Houdt het budget vast (schaalt niet op) als minder dan de helft van de sollicitaties bruikbaar wordt bevonden, ook als de kosten laag zijn.",
   },
   {
     icon: TrendingUp,
-    title: "Budget schalen (met jouw goedkeuring)",
-    text: "Stelt voor het dagbudget met maximaal 15% te verhogen zodra de CPL binnen doel blijft én de leadkwaliteit op orde is -- verschijnt als voorstel bij \"Uit te voeren acties\" en wordt pas uitgevoerd na jouw akkoord, begrensd door het portfolio-dagbudget.",
+    title: "Budget opschalen (met jouw goedkeuring)",
+    text: "Stelt voor het dagbudget met maximaal 15% te verhogen zodra het goed gaat — verschijnt als voorstel bij \"Uit te voeren acties\" en wordt pas uitgevoerd na jouw akkoord, begrensd door het portfolio-dagbudget.",
   },
 ] as const;
 
