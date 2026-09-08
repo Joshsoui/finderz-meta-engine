@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
-  BrainCircuit, ImageIcon, LayoutDashboard, Megaphone, Settings2, Users, Zap,
+  BrainCircuit, FileSpreadsheet, ImageIcon, LayoutDashboard, Megaphone, Settings2, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -13,7 +13,7 @@ import {
 import { useMetaStatus } from "@/lib/use-meta-status";
 import { Toaster, toast } from "sonner";
 
-export type NavKey = "overzicht" | "pipeline" | "creatives" | "leads" | "optimalisaties" | "automatisering";
+export type NavKey = "overzicht" | "pipeline" | "creatives" | "leads" | "optimalisaties" | "automatisering" | "rapportage";
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; icon: typeof LayoutDashboard; href?: string; badge?: string }> = [
   { key: "overzicht", label: "Overzicht", icon: LayoutDashboard, href: "/" },
@@ -22,6 +22,7 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; icon: typeof LayoutDashboar
   { key: "leads", label: "Leads", icon: Users, href: "/leads" },
   { key: "optimalisaties", label: "Optimalisaties", icon: BrainCircuit, href: "/optimalisaties" },
   { key: "automatisering", label: "Automatisering", icon: Zap, href: "/automatisering" },
+  { key: "rapportage", label: "Rapportage", icon: FileSpreadsheet, href: "/rapportage" },
 ];
 
 export function FinderzMark({ compact = false }: { compact?: boolean }) {

@@ -113,6 +113,13 @@
       "when": 1788855143942,
       "tag": "0015_familiar_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1788856150852,
+      "tag": "0016_blue_weapon_omega",
+      "breakpoints": true
     }
   ]
 }

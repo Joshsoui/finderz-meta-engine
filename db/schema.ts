@@ -178,3 +178,18 @@ export const accountSpendSummary = sqliteTable("account_spend_summary", {
   lifetimeCents: integer("lifetime_cents").notNull().default(0),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * A day-by-day history of accountSpendSummary.todayCents, one row per date
+ * -- accountSpendSummary itself only ever holds today/last_7d/lifetime, so
+ * without this a spend export could only ever look back 7 days for the
+ * whole-account (non-platform-tracked-campaigns-included) Meta figure.
+ * Written once per 15-minute monitor cycle alongside accountSpendSummary
+ * (each write for "today" simply overwrites the same row until the day
+ * rolls over).
+ */
+export const accountSpendDailyLog = sqliteTable("account_spend_daily_log", {
+  date: text("date").primaryKey(), // YYYY-MM-DD, Europe/Amsterdam local date
+  amountCents: integer("amount_cents").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
