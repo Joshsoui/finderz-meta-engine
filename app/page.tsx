@@ -112,7 +112,7 @@ function formatDayLabel(date: string, today: string) {
   return new Intl.DateTimeFormat("nl-NL", { weekday: "short", day: "numeric", month: "short" }).format(new Date(year, month - 1, day));
 }
 
-function DailySpendCard() {
+function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; totalSpend: number }) {
   const [today, setToday] = useState("");
   const [entries, setEntries] = useState<DailySpendEntry[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -197,10 +197,18 @@ function DailySpendCard() {
         ) : (
           <div className="daily-spend-display">
             <span className="daily-spend-amount">{isLoading ? "…" : euro.format((todayEntry?.amountCents ?? 0) / 100)}</span>
-            <button className="secondary-button" onClick={startEditing}><Pencil className="size-4" />{todayEntry ? "Bewerken" : "Invullen"}</button>
+            {isAutomatic ? (
+              <span className="live-pulse"><span />Automatisch via Meta</span>
+            ) : (
+              <button className="secondary-button" onClick={startEditing}><Pencil className="size-4" />{todayEntry ? "Bewerken" : "Invullen"}</button>
+            )}
           </div>
         )}
-        <p className="daily-spend-hint">Vul hier dagelijks het totaal in dat je in Meta Ads Manager ziet — dan hoeft dit niet meer los in een sheet.</p>
+        <p className="daily-spend-hint">
+          {isAutomatic
+            ? "Wordt elke 15 minuten automatisch bijgewerkt met de echte spend uit Meta -- geen handmatige invoer meer nodig."
+            : "Vul hier dagelijks het totaal in dat je in Meta Ads Manager ziet — dan hoeft dit niet meer los in een sheet."}
+        </p>
       </div>
       <div className="daily-spend-week">
         <span className="daily-spend-week-label">Laatste 7 dagen</span>
@@ -214,6 +222,10 @@ function DailySpendCard() {
           ))}
           {!isLoading && entries.length === 0 && <p className="daily-spend-empty">Nog geen dagen ingevuld.</p>}
         </div>
+      </div>
+      <div className="daily-spend-week">
+        <span className="daily-spend-week-label">In totaal (alle campagnes)</span>
+        <strong className="daily-spend-week-total">{euro.format(totalSpend)}</strong>
       </div>
     </section>
   );
@@ -528,7 +540,7 @@ export default function Home() {
       subtitle="Vrijdag 5 september · laatste analyse 2 min geleden"
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
-          <DailySpendCard />
+          <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[

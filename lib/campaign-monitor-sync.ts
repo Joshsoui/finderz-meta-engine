@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns, leads, metaSyncHealth, metricSnapshots, optimizationActions } from "@/db/schema";
 import { deriveDailyBudgetCents, evaluateCampaign } from "@/lib/campaign-engine";
+import { syncAutomaticDailySpend } from "@/lib/daily-spend-sync";
 import { fetchAdStatus, fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
 
 async function recordMetaSyncResult(db: Awaited<ReturnType<typeof getDb>>, error?: unknown) {
@@ -191,6 +192,10 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
   if (credentials) {
     if (anyMetaCallSucceeded) await recordMetaSyncResult(db);
     else if (lastMetaError) await recordMetaSyncResult(db, lastMetaError);
+    // Replaces the manual "type in what Ads Manager shows" daily habit --
+    // reads from metricSnapshots already recorded above, so this stays
+    // accurate even if a single campaign's insights call failed this cycle.
+    await syncAutomaticDailySpend();
   }
 
   return { evaluated: liveCampaigns.length, actionsApplied };
