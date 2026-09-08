@@ -267,8 +267,13 @@ export async function createMetaCampaign(input: CreateMetaCampaignInput): Promis
 
 export type MetaCampaignInsights = { spend: number; impressions: number; clicks: number; leads: number; frequency: number };
 
-/** Fetches today's cumulative insights for one campaign. */
-export async function fetchCampaignInsights(metaCampaignId: string, datePreset: "today" | "lifetime" = "today"): Promise<MetaCampaignInsights> {
+/**
+ * Fetches cumulative insights for one campaign. "maximum" is Meta's actual
+ * date_preset for "since the beginning" -- confirmed against the real API:
+ * "lifetime" (the older/commonly-documented name) is rejected with
+ * "(#100) lifetime is not a valid date_preset".
+ */
+export async function fetchCampaignInsights(metaCampaignId: string, datePreset: "today" | "maximum" = "today"): Promise<MetaCampaignInsights> {
   const credentials = getMetaCredentials();
   if (!credentials) throw new Error("Meta is not configured");
 
@@ -306,7 +311,7 @@ export type MetaAccountCampaign = {
  * ~15 of those before this platform existed). Pure reporting: read-only,
  * fetched on demand when the dashboard is opened, never touches anything
  * this platform itself manages. Uses Meta's nested field-expansion syntax
- * (insights.date_preset(lifetime){...}) to get each campaign's lifetime
+ * (insights.date_preset(maximum){...}) to get each campaign's lifetime
  * spend/leads in the same request as the campaign list, rather than one
  * extra call per campaign.
  */
@@ -323,7 +328,7 @@ export async function fetchAllAccountCampaigns(): Promise<MetaAccountCampaign[]>
       insights?: { data?: Array<{ spend?: string; actions?: Array<{ action_type: string; value: string }> }> };
     }>;
   }>(`/act_${credentials.adAccountId}/campaigns`, credentials.accessToken, {
-    params: { fields: "name,status,effective_status,insights.date_preset(lifetime){spend,actions}", limit: 200 },
+    params: { fields: "name,status,effective_status,insights.date_preset(maximum){spend,actions}", limit: 200 },
   });
 
   return (result.data ?? []).map((campaign) => {
@@ -373,7 +378,7 @@ export async function fetchPlacementBreakdown(metaCampaignId: string): Promise<M
       actions?: Array<{ action_type: string; value: string }>;
     }>;
   }>(`/${metaCampaignId}/insights`, credentials.accessToken, {
-    params: { fields: "spend,impressions,clicks,actions", breakdowns: "publisher_platform,platform_position", date_preset: "lifetime" },
+    params: { fields: "spend,impressions,clicks,actions", breakdowns: "publisher_platform,platform_position", date_preset: "maximum" },
   });
 
   return (result.data ?? []).map((row) => {
@@ -416,7 +421,7 @@ export async function fetchAccountSpendSummary(): Promise<MetaAccountSpendSummar
   const [todaySpend, last7dSpend, lifetimeSpend] = await Promise.all([
     fetchSpend("today"),
     fetchSpend("last_7d"),
-    fetchSpend("lifetime"),
+    fetchSpend("maximum"),
   ]);
 
   return { todaySpend, last7dSpend, lifetimeSpend };

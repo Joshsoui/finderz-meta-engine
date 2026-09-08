@@ -68,7 +68,7 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         // budget-ceiling rule and the dashboard's spend/profit totals both
         // assume campaigns.spentCents is the running total since launch, and
         // a "today"-scoped fetch would silently reset that total every day.
-        const insights = await fetchCampaignInsights(campaign.metaCampaignId, "lifetime");
+        const insights = await fetchCampaignInsights(campaign.metaCampaignId, "maximum");
         anyMetaCallSucceeded = true;
         const [inserted] = await db
           .insert(metricSnapshots)
