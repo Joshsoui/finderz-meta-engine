@@ -270,6 +270,55 @@ export async function fetchCampaignInsights(metaCampaignId: string, datePreset: 
   };
 }
 
+export type MetaPlacementBreakdown = {
+  platform: string;
+  position: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+};
+
+/**
+ * Fetches lifetime insights broken down per placement (publisher_platform x
+ * platform_position -- e.g. Facebook Feed vs. Instagram Stories), so a
+ * recruiter can see which placements actually deliver leads instead of just
+ * one campaign-wide total. Fetched on demand when a campaign is opened, not
+ * part of the 15-minute monitor loop -- this is reporting, not a decision
+ * input. Meta's docs don't enumerate every platform_position value, so raw
+ * values are returned as-is; the UI applies best-effort friendly labels with
+ * a fallback to the raw string.
+ */
+export async function fetchPlacementBreakdown(metaCampaignId: string): Promise<MetaPlacementBreakdown[]> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const result = await metaRequest<{
+    data?: Array<{
+      publisher_platform?: string;
+      platform_position?: string;
+      spend?: string;
+      impressions?: string;
+      clicks?: string;
+      actions?: Array<{ action_type: string; value: string }>;
+    }>;
+  }>(`/${metaCampaignId}/insights`, credentials.accessToken, {
+    params: { fields: "spend,impressions,clicks,actions", breakdowns: "publisher_platform,platform_position", date_preset: "lifetime" },
+  });
+
+  return (result.data ?? []).map((row) => {
+    const leadAction = row.actions?.find((action) => action.action_type === "lead" || action.action_type === "leadgen.other");
+    return {
+      platform: row.publisher_platform ?? "onbekend",
+      position: row.platform_position ?? "onbekend",
+      spend: Number(row.spend ?? 0),
+      impressions: Number(row.impressions ?? 0),
+      clicks: Number(row.clicks ?? 0),
+      leads: Number(leadAction?.value ?? 0),
+    };
+  });
+}
+
 export type MetaAdStatus = { effectiveStatus: string; rejectionReason?: string };
 
 /**

@@ -73,6 +73,54 @@ const euro = new Intl.NumberFormat("nl-NL", {
 
 type HistoryPoint = { recordedAt: string; cpl: number | null };
 
+type PlacementBreakdown = { platform: string; position: string; spend: number; impressions: number; clicks: number; leads: number };
+
+// Meta's own labels for publisher_platform / platform_position; not every
+// value is documented, so anything not listed here just shows the raw value
+// from Meta rather than guessing at a translation.
+const PLATFORM_LABEL: Record<string, string> = { facebook: "Facebook", instagram: "Instagram", audience_network: "Audience Network", messenger: "Messenger" };
+const POSITION_LABEL: Record<string, string> = {
+  feed: "Feed", story: "Stories", reels: "Reels", facebook_reels: "Reels",
+  video_feeds: "Video feed", marketplace: "Marketplace", right_hand_column: "Zijbalk",
+  search: "Zoeken", instream_banner: "In-stream", stream: "Feed", explore: "Verkennen", explore_home: "Verkennen",
+};
+
+function PlacementTable({ placements, connected }: { placements: PlacementBreakdown[]; connected: boolean }) {
+  if (!connected) {
+    return (
+      <div className="panel">
+        <div className="panel-header"><p className="text-sm font-semibold text-white">Resultaat per plaatsing</p></div>
+        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Beschikbaar zodra deze campagne aan Meta gekoppeld is — dan zie ik hier of Feed, Stories of Reels de beste leads oplevert.</p>
+      </div>
+    );
+  }
+  const sorted = placements.slice().sort((a, b) => b.spend - a.spend);
+  return (
+    <div className="panel">
+      <div className="panel-header"><p className="text-sm font-semibold text-white">Resultaat per plaatsing</p><p className="mt-1 text-xs text-[#607b8d]">Waar de leads vandaan komen — zo weet ik waar ik het budget op moet richten</p></div>
+      {sorted.length === 0 ? (
+        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Nog geen data per plaatsing — komt zodra deze campagne wat langer draait.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow><TableHead>Plaatsing</TableHead><TableHead>Uitgegeven</TableHead><TableHead>Leads</TableHead><TableHead>Kosten/lead</TableHead></TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.map((row, index) => (
+              <TableRow key={`${row.platform}-${row.position}-${index}`}>
+                <TableCell>{PLATFORM_LABEL[row.platform] ?? row.platform} · {POSITION_LABEL[row.position] ?? row.position}</TableCell>
+                <TableCell>{euro.format(row.spend)}</TableCell>
+                <TableCell>{row.leads}</TableCell>
+                <TableCell>{row.leads > 0 ? euro.format(row.spend / row.leads) : "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
 const trendDateFormat = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "short" });
 
 function TrendChart({ history }: { history: HistoryPoint[] }) {
@@ -443,6 +491,8 @@ export default function Home() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [recentActions, setRecentActions] = useState<OptimizationAction[]>([]);
   const [campaignHistory, setCampaignHistory] = useState<HistoryPoint[]>([]);
+  const [placements, setPlacements] = useState<PlacementBreakdown[]>([]);
+  const [placementsConnected, setPlacementsConnected] = useState(false);
   const selected = campaigns.find((campaign) => campaign.id === selectedId);
   const totals = useMemo(() => {
     const spend = campaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
@@ -522,6 +572,33 @@ export default function Home() {
     // Depend on the id, not the whole `selected` object: `selected` is
     // re-derived via campaigns.find() on every render, so depending on it
     // directly would refetch history on every unrelated campaign edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!selected) {
+        if (!cancelled) {
+          setPlacements([]);
+          setPlacementsConnected(false);
+        }
+        return;
+      }
+      try {
+        const response = await fetch(`/api/campaigns/${selected.id}/placements`);
+        const payload = await response.json() as { placements?: PlacementBreakdown[]; connected?: boolean; error?: string };
+        if (response.ok && !cancelled) {
+          setPlacements(payload.placements ?? []);
+          setPlacementsConnected(Boolean(payload.connected));
+        }
+      } catch {
+        // The performance tab still works without a placement breakdown; fail quietly.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
@@ -846,6 +923,9 @@ export default function Home() {
                         </label>
                         <p className="mt-2 text-xs leading-5 text-[#607b8d]">Meta krijgt hiervan een dagbudget van circa {euro.format(deriveDailyBudgetCents(Math.round(selected.maxBudget * 100), selected.campaignDurationDays) / 100)}. Een campagne die je bewust langer laat draaien, moet hier een hoger aantal dagen hebben staan.</p>
                       </div>
+                    </div>
+                    <div className="mt-6">
+                      <PlacementTable placements={placements} connected={placementsConnected} />
                     </div>
                   </TabsContent>
                   <TabsContent value="creative" className="p-5">
