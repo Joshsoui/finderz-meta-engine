@@ -291,6 +291,55 @@ export async function fetchCampaignInsights(metaCampaignId: string, datePreset: 
   };
 }
 
+export type MetaAccountCampaign = {
+  id: string;
+  name: string;
+  status: string;
+  effectiveStatus: string;
+  spend: number;
+  leads: number;
+};
+
+/**
+ * Lists every campaign in the whole ad account -- including ones made
+ * directly in Ads Manager, outside this platform (this account already had
+ * ~15 of those before this platform existed). Pure reporting: read-only,
+ * fetched on demand when the dashboard is opened, never touches anything
+ * this platform itself manages. Uses Meta's nested field-expansion syntax
+ * (insights.date_preset(lifetime){...}) to get each campaign's lifetime
+ * spend/leads in the same request as the campaign list, rather than one
+ * extra call per campaign.
+ */
+export async function fetchAllAccountCampaigns(): Promise<MetaAccountCampaign[]> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const result = await metaRequest<{
+    data?: Array<{
+      id: string;
+      name: string;
+      status: string;
+      effective_status: string;
+      insights?: { data?: Array<{ spend?: string; actions?: Array<{ action_type: string; value: string }> }> };
+    }>;
+  }>(`/act_${credentials.adAccountId}/campaigns`, credentials.accessToken, {
+    params: { fields: "name,status,effective_status,insights.date_preset(lifetime){spend,actions}", limit: 200 },
+  });
+
+  return (result.data ?? []).map((campaign) => {
+    const insightsRow = campaign.insights?.data?.[0];
+    const leadAction = insightsRow?.actions?.find((action) => action.action_type === "lead" || action.action_type === "leadgen.other");
+    return {
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      effectiveStatus: campaign.effective_status,
+      spend: Number(insightsRow?.spend ?? 0),
+      leads: Number(leadAction?.value ?? 0),
+    };
+  });
+}
+
 export type MetaPlacementBreakdown = {
   platform: string;
   position: string;

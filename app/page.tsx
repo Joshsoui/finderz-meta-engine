@@ -347,6 +347,89 @@ function AccountSpendCard() {
   );
 }
 
+type AdManagerCampaign = { id: string; name: string; status: string; effectiveStatus: string; spend: number; leads: number };
+
+const AD_MANAGER_STATUS: Record<string, { label: string; statusClass: string }> = {
+  ACTIVE: { label: "Actief", statusClass: "status-good" },
+  PAUSED: { label: "Gepauzeerd", statusClass: "status-draft" },
+  ARCHIVED: { label: "Gearchiveerd", statusClass: "status-draft" },
+  DELETED: { label: "Verwijderd", statusClass: "status-draft" },
+  DISAPPROVED: { label: "Afgekeurd", statusClass: "status-paused" },
+  PENDING_REVIEW: { label: "In beoordeling", statusClass: "status-attention" },
+  WITH_ISSUES: { label: "Heeft een probleem", statusClass: "status-attention" },
+  IN_PROCESS: { label: "Wordt verwerkt", statusClass: "status-attention" },
+};
+
+function AdManagerCampaignsCard() {
+  const [connected, setConnected] = useState(false);
+  const [campaigns, setCampaigns] = useState<AdManagerCampaign[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/meta/all-campaigns");
+        const payload = await response.json() as { connected?: boolean; campaigns?: AdManagerCampaign[]; error?: string };
+        if (response.ok && !cancelled) {
+          setConnected(Boolean(payload.connected));
+          setCampaigns(payload.campaigns ?? []);
+        }
+      } catch {
+        // The dashboard still works without this panel; fail quietly.
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sorted = campaigns.slice().sort((a, b) => {
+    if (a.effectiveStatus === "ACTIVE" && b.effectiveStatus !== "ACTIVE") return -1;
+    if (b.effectiveStatus === "ACTIVE" && a.effectiveStatus !== "ACTIVE") return 1;
+    return b.spend - a.spend;
+  });
+
+  return (
+    <article className="panel overflow-hidden">
+      <div className="panel-header">
+        <div>
+          <div className="eyebrow"><Megaphone className="size-3.5" />Rechtstreeks uit Meta</div>
+          <h2>Campagnes in Ads Manager</h2>
+          <p className="mt-1 text-xs text-[#607b8d]">Alles wat er in het hele advertentieaccount staat, óók wat niet via dit platform is gemaakt of wordt beheerd.</p>
+        </div>
+      </div>
+      {!connected ? (
+        <p className="px-5 py-10 text-sm text-[#7f97a8]">Beschikbaar zodra Meta gekoppeld is.</p>
+      ) : isLoading ? (
+        <div className="flex items-center justify-center py-16 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
+      ) : sorted.length === 0 ? (
+        <p className="px-5 py-10 text-sm text-[#7f97a8]">Geen campagnes gevonden in dit advertentieaccount.</p>
+      ) : (
+        <div className="max-h-[26rem] divide-y divide-white/8 overflow-y-auto scrollbar-thin">
+          {sorted.map((campaign) => {
+            const stoplicht = AD_MANAGER_STATUS[campaign.effectiveStatus] ?? { label: campaign.effectiveStatus, statusClass: "status-attention" };
+            return (
+              <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={campaign.id}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
+                  <span className="truncate text-sm font-medium text-white">{campaign.name}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-5 text-right text-sm">
+                  <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="text-white">{euro.format(campaign.spend)}</strong></div>
+                  <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="text-white">{campaign.leads}</strong></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </article>
+  );
+}
+
 type MarketingSpendSummary = {
   today: { meta: number; indeed: number; total: number };
   last7d: { meta: number; indeed: number; total: number };
@@ -1114,22 +1197,9 @@ export default function Home() {
     );
   }
 
-  if (!selected) {
-    return (
-      <AppShell active="overzicht" title="Campagnes" headerActions={<NewCampaignSheet onCreate={addCampaign} />}>
-        <div className="flex flex-col items-center justify-center gap-5 px-6 py-24 text-center text-white">
-          <FinderzMark />
-          <h1 className="text-xl font-semibold">Nog geen campagnes</h1>
-          <p className="max-w-sm text-sm text-[#91aabb]">Maak je eerste campagne aan, of haal vacatures binnen via de <Link href="/pipeline" className="text-[#5bc0df] underline">pipeline</Link>.</p>
-          <NewCampaignSheet onCreate={addCampaign} />
-        </div>
-      </AppShell>
-    );
-  }
-
-  const budgetUsed = selected.maxBudget ? Math.min((selected.spend / selected.maxBudget) * 100, 100) : 0;
-  const cpl = selected.leads ? selected.spend / selected.leads : 0;
-  const ctr = selected.impressions ? (selected.clicks / selected.impressions) * 100 : 0;
+  const budgetUsed = selected?.maxBudget ? Math.min((selected.spend / selected.maxBudget) * 100, 100) : 0;
+  const cpl = selected?.leads ? selected.spend / selected.leads : 0;
+  const ctr = selected?.impressions ? (selected.clicks / selected.impressions) * 100 : 0;
 
   return (
     <AppShell
@@ -1143,6 +1213,8 @@ export default function Home() {
           <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
           <AccountSpendCard />
+
+          <AdManagerCampaignsCard />
 
           <IndeedSpendCard onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
@@ -1193,6 +1265,14 @@ export default function Home() {
             </div>
           </section>
 
+          {!selected ? (
+            <article className="panel flex flex-col items-center justify-center gap-4 px-6 py-16 text-center text-white">
+              <FinderzMark />
+              <h2 className="text-lg font-semibold">Nog geen campagnes</h2>
+              <p className="max-w-sm text-sm text-[#91aabb]">Maak je eerste campagne aan, of haal vacatures binnen via de <Link href="/pipeline" className="text-[#5bc0df] underline">pipeline</Link>. De cijfers hierboven blijven ondertussen gewoon zichtbaar.</p>
+              <NewCampaignSheet onCreate={addCampaign} />
+            </article>
+          ) : (
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1.62fr)_380px]">
             <div className="space-y-6">
               <article className="panel overflow-hidden">
@@ -1382,6 +1462,7 @@ export default function Home() {
               </article>
             </aside>
           </section>
+          )}
     </AppShell>
   );
 }
