@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { campaigns } from "@/db/schema";
+import { campaigns, leads, metricSnapshots, optimizationActions, pipelineVacancies } from "@/db/schema";
 import { errorResponse } from "@/lib/api-error";
 import { deriveDailyBudgetCents, MIN_DAILY_BUDGET_CENTS } from "@/lib/campaign-engine";
 import { createMetaCampaign, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
@@ -117,5 +117,45 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return Response.json({ campaign, dailyBudgetCappedByPortfolioLimit });
   } catch (error) {
     return errorResponse(error, "Campaign could not be updated");
+  }
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const db = await getDb();
+    const [existing] = await db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+    if (!existing) return Response.json({ error: "Campaign not found" }, { status: 404 });
+
+    // A live campaign may still be spending real money on Meta -- deleting
+    // the record that tracks and can pause it would orphan that spend with
+    // nothing watching it. Require pausing first (same safety principle as
+    // everywhere else: pausing is the one action that never waits).
+    if (existing.status === "live") {
+      return Response.json({ error: "Pauzeer deze campagne eerst voordat je 'm verwijdert." }, { status: 400 });
+    }
+
+    const credentials = getMetaCredentials();
+    if (credentials && existing.metaCampaignId) {
+      // Defensive: existing.status shouldn't be "live" here, but a stale
+      // status shouldn't be able to leave a Meta campaign running unwatched.
+      try {
+        await setMetaCampaignStatus(existing.metaCampaignId, "PAUSED");
+      } catch (error) {
+        console.error(`Could not pause Meta campaign ${existing.metaCampaignId} before deleting`, error);
+      }
+    }
+
+    await db.delete(metricSnapshots).where(eq(metricSnapshots.campaignId, id));
+    await db.delete(leads).where(eq(leads.campaignId, id));
+    await db.delete(optimizationActions).where(eq(optimizationActions.campaignId, id));
+    // The pipeline vacancy that spawned this campaign shouldn't disappear or
+    // stay stuck pointing at a deleted campaign -- free it up as "new" again.
+    await db.update(pipelineVacancies).set({ campaignId: null, status: "new", updatedAt: new Date().toISOString() }).where(eq(pipelineVacancies.campaignId, id));
+    await db.delete(campaigns).where(eq(campaigns.id, id));
+
+    return Response.json({ deleted: true });
+  } catch (error) {
+    return errorResponse(error, "Campaign could not be deleted");
   }
 }

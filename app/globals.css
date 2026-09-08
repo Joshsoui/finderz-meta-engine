@@ -91,13 +91,13 @@
 }
 
 * { border-color: var(--border); }
-html { background: #123655; }
+html { background: #15385a; }
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 70% -10%, rgba(53,183,223,.16), transparent 32rem),
-    radial-gradient(circle at 10% 100%, rgba(103,153,156,.1), transparent 28rem),
-    #163d59;
+    radial-gradient(circle at 70% -10%, rgba(53,183,223,.18), transparent 32rem),
+    radial-gradient(circle at 10% 100%, rgba(103,153,156,.11), transparent 28rem),
+    #1a4162;
   color: var(--foreground);
   font-family: var(--font-sans);
 }
@@ -111,11 +111,11 @@ button { cursor: pointer; }
   color: white; font-size: 1.05rem; font-weight: 900;
 }
 .panel {
-  border: 1px solid rgba(139,184,205,.16); border-radius: 1rem;
-  background: linear-gradient(145deg,rgba(23,55,77,.97),rgba(16,42,60,.97));
+  border: 1px solid rgba(148,193,214,.22); border-radius: 1rem;
+  background: linear-gradient(145deg,rgba(41,90,122,.97),rgba(28,68,95,.97));
   box-shadow: 0 18px 45px rgba(0,0,0,.15); transition: border-color 180ms ease, box-shadow 180ms ease;
 }
-.panel:hover { border-color: rgba(73,184,216,.3); }
+.panel:hover { border-color: rgba(73,184,216,.4); }
 .panel-header {
   display: flex; min-height: 5.25rem; align-items: center; justify-content: space-between; gap: 1rem;
   border-bottom: 1px solid rgba(255,255,255,.07); padding: 1.1rem 1.25rem;
@@ -126,11 +126,11 @@ button { cursor: pointer; }
   font-weight: 750; letter-spacing: .1em; text-transform: uppercase;
 }
 .metric-card {
-  min-width: 0; border: 1px solid rgba(139,184,205,.15); border-radius: .9rem;
-  background: linear-gradient(150deg,rgba(24,58,80,.96),rgba(16,42,60,.96)); padding: 1.15rem;
+  min-width: 0; border: 1px solid rgba(148,193,214,.2); border-radius: .9rem;
+  background: linear-gradient(150deg,rgba(43,94,127,.96),rgba(29,70,97,.96)); padding: 1.15rem;
   transition: border-color 180ms ease, transform 180ms ease;
 }
-.metric-card:hover { border-color: rgba(73,184,216,.35); transform: translateY(-2px); }
+.metric-card:hover { border-color: rgba(73,184,216,.45); transform: translateY(-2px); }
 .metric-icon {
   display: flex; width: 2.25rem; height: 2.25rem; align-items: center; justify-content: center;
   border: 1px solid rgba(70,174,207,.18); border-radius: .72rem;
@@ -176,7 +176,7 @@ button { cursor: pointer; }
 }
 
 .section-tabs-wrap { border-bottom: 1px solid rgba(255,255,255,.08); padding: .8rem 1.25rem; }
-.section-tabs { display: inline-flex; gap: .3rem; border-radius: .8rem; background: rgba(2,15,24,.35); padding: .3rem; }
+.section-tabs { display: inline-flex; gap: .3rem; }
 .section-tab {
   display: inline-flex !important; height: 2.3rem; align-items: center; gap: .45rem; border-radius: .6rem !important;
   padding: 0 1rem !important; font-size: .82rem; font-weight: 650; color: #85a0b1 !important;

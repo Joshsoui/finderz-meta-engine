@@ -6,7 +6,7 @@ import {
   Activity, AlertTriangle, BarChart3, BrainCircuit,
   CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
   Megaphone, MousePointerClick, Pause, Pencil, Play, Plus,
-  RefreshCw, Search, ShieldCheck, Sparkles, Target, Upload,
+  RefreshCw, Search, ShieldCheck, Sparkles, Target, Trash2, Upload,
   TrendingUp, Users, Zap, LoaderCircle,
 } from "lucide-react";
 import { AppShell, FinderzMark } from "@/components/app-shell";
@@ -795,6 +795,7 @@ export default function Home() {
   const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
   const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [recentActions, setRecentActions] = useState<OptimizationAction[]>([]);
   const [campaignHistory, setCampaignHistory] = useState<HistoryPoint[]>([]);
   const [placements, setPlacements] = useState<PlacementBreakdown[]>([]);
@@ -937,6 +938,27 @@ export default function Home() {
     patchSelected(update);
     toast.success(message);
     void persistSelected(toApiFields(update));
+  }
+
+  async function deleteSelected() {
+    if (!selected) return;
+    if (!window.confirm(`"${selected.title}" definitief verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/campaigns/${selected.id}`, { method: "DELETE" });
+      const payload = await response.json() as { deleted?: boolean; error?: string };
+      if (!response.ok || !payload.deleted) throw new Error(payload.error || "Campagne kon niet worden verwijderd.");
+      setCampaigns((current) => {
+        const remaining = current.filter((campaign) => campaign.id !== selected.id);
+        setSelectedId(remaining[0]?.id);
+        return remaining;
+      });
+      toast.success("Campagne verwijderd");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Campagne kon niet worden verwijderd.");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   async function regenerateBackground() {
@@ -1314,6 +1336,11 @@ export default function Home() {
                     onClick={() => updateSelected({ status: "completed", recommendation: "Deze vacature is ingevuld. Mooi resultaat!", nextAction: "Bekijk het resultaat" }, "Gemarkeerd als afgerond")}
                   >
                     <CheckCircle2 className="size-4" />Kandidaat gevonden, markeer als afgerond
+                  </button>
+                )}
+                {selected.status !== "live" && (
+                  <button className="danger-button mt-2 w-full justify-center" disabled={isDeleting} onClick={() => void deleteSelected()}>
+                    {isDeleting ? <LoaderCircle className="size-4 animate-spin" /> : <Trash2 className="size-4" />}Verwijder deze campagne
                   </button>
                 )}
               </article>

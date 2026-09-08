@@ -47,7 +47,7 @@ export function AppShell({
 
   return (
     <SidebarProvider>
-      <Sidebar collapsible="icon" className="border-r border-white/8 bg-[#0d2b45]">
+      <Sidebar collapsible="icon" className="border-r border-white/8 bg-[#0f2f4c]">
         <SidebarHeader className="h-[74px] justify-center border-b border-white/8 px-5">
           <div className="group-data-[collapsible=icon]:hidden"><FinderzMark /></div>
           <div className="hidden group-data-[collapsible=icon]:block"><FinderzMark compact /></div>
@@ -102,8 +102,8 @@ export function AppShell({
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset className="min-w-0 bg-[#113047]">
-        <header className="sticky top-0 z-30 flex h-[74px] items-center border-b border-white/8 bg-[#113047]/95 px-4 backdrop-blur md:px-7">
+      <SidebarInset className="min-w-0 bg-[#153858]">
+        <header className="sticky top-0 z-30 flex h-[74px] items-center border-b border-white/8 bg-[#153858]/95 px-4 backdrop-blur md:px-7">
           <SidebarTrigger className="mr-3 text-[#91aabb] hover:bg-white/5 hover:text-white" />
           <div className="min-w-0"><h1 className="truncate text-lg font-semibold tracking-tight text-white">{title}</h1>{subtitle && <p className="hidden text-xs text-[#6f8798] sm:block">{subtitle}</p>}</div>
           <div className="ml-auto flex items-center gap-3">
