@@ -1,9 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns, leads, metaSyncHealth, metricSnapshots, optimizationActions } from "@/db/schema";
-import { deriveDailyBudgetCents, evaluateCampaign } from "@/lib/campaign-engine";
+import { evaluateCampaign } from "@/lib/campaign-engine";
 import { syncAutomaticDailySpend } from "@/lib/daily-spend-sync";
-import { fetchAdStatus, fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
+import { fetchAdStatus, fetchCampaignInsights, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
 
 async function recordMetaSyncResult(db: Awaited<ReturnType<typeof getDb>>, error?: unknown) {
   const now = new Date().toISOString();
@@ -146,17 +146,38 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
         updatedAt: now,
       };
 
+      if (decision.action === "scale_budget") {
+        // Spending more money is a discretionary call, not a safety action --
+        // unlike pausing (which protects money and shouldn't wait on anyone),
+        // a budget increase sits as a pending suggestion in "Uit te voeren
+        // acties" until a human approves it. Avoid stacking a duplicate
+        // suggestion every 15 minutes while one is already awaiting approval.
+        const [existingPending] = await db
+          .select({ id: optimizationActions.id })
+          .from(optimizationActions)
+          .where(and(eq(optimizationActions.campaignId, campaign.id), eq(optimizationActions.rule, "healthy_cpl"), eq(optimizationActions.status, "pending")))
+          .limit(1);
+        if (!existingPending) {
+          await db.insert(optimizationActions).values({
+            campaignId: campaign.id,
+            rule: decision.rule,
+            severity: decision.severity,
+            recommendation: decision.recommendation,
+            status: "pending",
+            budgetChangePercent: decision.budgetChangePercent,
+            createdAt: now,
+          });
+          actionsApplied += 1;
+        }
+        await db.update(campaigns).set(campaignUpdate).where(eq(campaigns.id, campaign.id));
+        continue;
+      }
+
       if (decision.action === "pause") {
         campaignUpdate.status = "paused";
         if (credentials && campaign.metaCampaignId) await setMetaCampaignStatus(campaign.metaCampaignId, "PAUSED");
       } else if (decision.action === "refresh_creative") {
         campaignUpdate.status = "attention";
-      } else if (decision.action === "scale_budget") {
-        campaignUpdate.maxBudgetCents = Math.round(campaign.maxBudgetCents * (1 + decision.budgetChangePercent / 100));
-        campaignUpdate.budgetScaledAt = now;
-        if (credentials && campaign.metaCampaignId) {
-          await updateMetaCampaignBudget(campaign.metaCampaignId, deriveDailyBudgetCents(campaignUpdate.maxBudgetCents, campaign.campaignDurationDays));
-        }
       }
 
       if (decision.rule === "periodic_creative_check") {

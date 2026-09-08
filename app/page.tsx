@@ -34,8 +34,20 @@ type OptimizationAction = {
   rule: string;
   severity: "info" | "attention" | "critical";
   recommendation: string;
+  status?: "pending" | "applied" | "dismissed";
+  budgetChangePercent?: number | null;
   createdAt: string;
+  campaignId?: string;
   campaignTitle: string;
+};
+
+// Stoplicht: rood = urgent, oranje = bijna, groen = gezond -- gebruikt overal
+// waar een automatiseringsactie of -suggestie wordt getoond, zodat iemand
+// zonder marketingachtergrond in één oogopslag ziet wat aandacht nodig heeft.
+const SEVERITY_STOPLICHT: Record<OptimizationAction["severity"], { statusClass: string; label: string }> = {
+  critical: { statusClass: "status-paused", label: "Urgent" },
+  attention: { statusClass: "status-attention", label: "Bijna" },
+  info: { statusClass: "status-good", label: "Gezond" },
 };
 
 const ACTIVITY_RULE_LABEL: Record<string, string> = {
@@ -44,12 +56,12 @@ const ACTIVITY_RULE_LABEL: Record<string, string> = {
   cpl_above_limit: "CPL boven limiet",
   creative_fatigue: "Creative fatigue",
   low_lead_quality: "Lage leadkwaliteit",
-  healthy_cpl: "Gezonde CPL",
+  healthy_cpl: "Budget verhoogd",
   ad_rejected: "Advertentie afgekeurd",
   periodic_creative_check: "Periodieke creative-check",
 };
 
-const ACTIVITY_TONE: Record<OptimizationAction["severity"], string> = { info: "blue", attention: "amber", critical: "red" };
+const ACTIVITY_TONE: Record<OptimizationAction["severity"], string> = { info: "green", attention: "amber", critical: "red" };
 
 const activityDateFormat = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -228,6 +240,181 @@ function DailySpendCard({ isAutomatic, totalSpend }: { isAutomatic: boolean; tot
         <strong className="daily-spend-week-total">{euro.format(totalSpend)}</strong>
       </div>
     </section>
+  );
+}
+
+function PendingActionsCard() {
+  const [actions, setActions] = useState<OptimizationAction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<number | null>(null);
+
+  async function fetchPending(): Promise<OptimizationAction[]> {
+    const response = await fetch("/api/optimization-actions?status=pending");
+    const payload = await response.json() as { actions?: OptimizationAction[]; error?: string };
+    if (!response.ok || !payload.actions) throw new Error(payload.error || "Voorstellen konden niet worden geladen.");
+    return payload.actions;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const pending = await fetchPending();
+        if (!cancelled) setActions(pending);
+      } catch (error) {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Voorstellen konden niet worden geladen.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handle(action: OptimizationAction, decision: "approve" | "dismiss") {
+    setProcessingId(action.id);
+    try {
+      const response = await fetch(`/api/optimization-actions/${action.id}/${decision}`, { method: "POST" });
+      const payload = await response.json() as { error?: string; cappedByPortfolioLimit?: boolean };
+      if (!response.ok) throw new Error(payload.error || "Actie kon niet worden verwerkt.");
+      setActions((current) => current.filter((item) => item.id !== action.id));
+      if (decision === "approve") {
+        toast.success(
+          payload.cappedByPortfolioLimit
+            ? "Budget verhoogd, maar begrensd door het portfolio-dagbudget"
+            : "Budget verhoogd",
+        );
+      } else {
+        toast.info("Voorstel afgewezen");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Actie kon niet worden verwerkt.");
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  return (
+    <article className="panel overflow-hidden">
+      <div className="panel-header">
+        <div><div className="eyebrow"><Zap className="size-3.5" />Wacht op jouw goedkeuring</div><h2>Uit te voeren acties</h2></div>
+        {!isLoading && actions.length > 0 && <span className="rule-pill">{actions.length}</span>}
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
+      ) : actions.length === 0 ? (
+        <div className="flex items-center gap-3 px-5 py-10 text-sm text-[#7f97a8]"><CheckCircle2 className="size-5 text-[#4ade80]" />Niets om goed te keuren. Alles draait zoals het hoort.</div>
+      ) : (
+        <div className="divide-y divide-white/8">
+          {actions.map((action) => {
+            const stoplicht = SEVERITY_STOPLICHT[action.severity];
+            return (
+              <div className="flex flex-wrap items-start justify-between gap-4 p-5" key={action.id}>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
+                    <strong className="text-sm text-white">{action.campaignTitle}</strong>
+                    {Number.isFinite(action.budgetChangePercent) && <span className="rule-pill">+{action.budgetChangePercent}% budget</span>}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-[#c4d1d9]">{action.recommendation}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button className="secondary-button" disabled={processingId === action.id} onClick={() => void handle(action, "dismiss")}>Afwijzen</button>
+                  <button className="primary-button" disabled={processingId === action.id} onClick={() => void handle(action, "approve")}>
+                    {processingId === action.id ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Goedkeuren
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function PortfolioBudgetCard() {
+  const [maxDailyBudget, setMaxDailyBudget] = useState<number>();
+  const [usedToday, setUsedToday] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/portfolio-settings");
+        const payload = await response.json() as { maxDailyBudget?: number; usedToday?: number; error?: string };
+        if (!response.ok || payload.maxDailyBudget === undefined) throw new Error(payload.error || "Instelling kon niet worden geladen.");
+        if (cancelled) return;
+        setMaxDailyBudget(payload.maxDailyBudget);
+        setUsedToday(payload.usedToday ?? 0);
+      } catch (error) {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Instelling kon niet worden geladen.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function save() {
+    const amount = Number(draft.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Vul een geldig bedrag in.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/portfolio-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ maxDailyBudget: amount }),
+      });
+      const payload = await response.json() as { maxDailyBudget?: number; usedToday?: number; error?: string };
+      if (!response.ok || payload.maxDailyBudget === undefined) throw new Error(payload.error || "Instelling kon niet worden opgeslagen.");
+      setMaxDailyBudget(payload.maxDailyBudget);
+      setUsedToday(payload.usedToday ?? 0);
+      setIsEditing(false);
+      toast.success("Maximaal dagbudget bijgewerkt");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Instelling kon niet worden opgeslagen.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const usedPercent = maxDailyBudget ? Math.min((usedToday / maxDailyBudget) * 100, 100) : 0;
+
+  return (
+    <article className="panel p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="eyebrow"><ShieldCheck className="size-3.5" />Portfolio-limiet</div>
+          <h2 className="mt-2">Maximaal dagbudget (alle campagnes samen)</h2>
+        </div>
+      </div>
+      {isEditing ? (
+        <div className="mt-4 flex items-center gap-2">
+          <span className="daily-spend-prefix">€</span>
+          <input autoFocus className="content-input" inputMode="decimal" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void save()} placeholder="350" />
+          <button className="primary-button" onClick={save} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Opslaan</button>
+          <button className="secondary-button" onClick={() => setIsEditing(false)}>Annuleren</button>
+        </div>
+      ) : (
+        <div className="mt-4 flex items-end justify-between">
+          <div><span className="text-2xl font-semibold text-white">{isLoading ? "…" : euro.format(usedToday)}</span><span className="ml-1 text-sm text-[#6f8798]">/ {isLoading ? "…" : euro.format(maxDailyBudget ?? 0)} per dag</span></div>
+          <button className="secondary-button" onClick={() => { setDraft(maxDailyBudget ? String(maxDailyBudget) : ""); setIsEditing(true); }}><Pencil className="size-4" />Wijzigen</button>
+        </div>
+      )}
+      {!isEditing && <Progress value={usedPercent} className="mt-3 h-2.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-gradient-to-r [&_[data-slot=progress-indicator]]:from-[#006192] [&_[data-slot=progress-indicator]]:to-[#42c3e7]" />}
+      <p className="mt-3 text-xs leading-5 text-[#607b8d]">Dit is de harde grens die Meta per dag mag uitgeven over alle campagnes samen. Een nieuwe campagne of budgetverhoging past zich automatisch aan deze grens aan.</p>
+    </article>
   );
 }
 
@@ -541,6 +728,10 @@ export default function Home() {
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
           <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} />
+
+          <PendingActionsCard />
+
+          <PortfolioBudgetCard />
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[

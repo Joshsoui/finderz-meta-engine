@@ -12,6 +12,7 @@ type OptimizationAction = {
   rule: string;
   severity: "info" | "attention" | "critical";
   recommendation: string;
+  status: "pending" | "applied" | "dismissed";
   createdAt: string;
   campaignTitle: string;
   campaignLocation: string;
@@ -45,8 +46,8 @@ const RULES = [
   },
   {
     icon: TrendingUp,
-    title: "Gecontroleerd schalen",
-    text: "Verhoogt het dagbudget met maximaal 15% zodra de CPL binnen doel blijft én de leadkwaliteit op orde is -- maximaal 1× per 24 uur per campagne.",
+    title: "Budget schalen (met jouw goedkeuring)",
+    text: "Stelt voor het dagbudget met maximaal 15% te verhogen zodra de CPL binnen doel blijft én de leadkwaliteit op orde is -- verschijnt als voorstel bij \"Uit te voeren acties\" en wordt pas uitgevoerd na jouw akkoord, begrensd door het portfolio-dagbudget.",
   },
 ] as const;
 
@@ -61,7 +62,7 @@ export default function AutomatiseringPage() {
     const response = await fetch("/api/optimization-actions");
     const payload = await response.json() as { actions?: OptimizationAction[]; error?: string };
     if (!response.ok || !payload.actions) throw new Error(payload.error || "Acties konden niet worden geladen.");
-    return payload.actions.slice(0, 8);
+    return payload.actions.filter((action) => action.status !== "pending").slice(0, 8);
   }
 
   useEffect(() => {

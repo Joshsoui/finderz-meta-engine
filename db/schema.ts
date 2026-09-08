@@ -120,8 +120,17 @@ export const optimizationActions = sqliteTable(
     severity: text("severity", { enum: ["info", "attention", "critical"] }).notNull(),
     recommendation: text("recommendation").notNull(),
     status: text("status", { enum: ["pending", "applied", "dismissed"] }).notNull().default("pending"),
+    /** Set only on a scale_budget suggestion awaiting approval -- the % increase to apply once a human approves it (see /api/optimization-actions/[id]/approve). */
+    budgetChangePercent: integer("budget_change_percent"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     appliedAt: text("applied_at"),
   },
   (table) => [index("idx_actions_campaign_status").on(table.campaignId, table.status)]
 );
+
+/** Single-row table (id always "global") holding portfolio-wide settings, currently just the hard cap on combined daily Meta spend across every campaign. */
+export const portfolioSettings = sqliteTable("portfolio_settings", {
+  id: text("id").primaryKey(),
+  maxDailyBudgetCents: integer("max_daily_budget_cents").notNull().default(35000),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

@@ -2,8 +2,9 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
 import { errorResponse } from "@/lib/api-error";
-import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
+import { deriveDailyBudgetCents, MIN_DAILY_BUDGET_CENTS } from "@/lib/campaign-engine";
 import { createMetaCampaign, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
+import { getPortfolioDailyBudgetHeadroomCents } from "@/lib/portfolio-budget";
 
 const CAMPAIGN_STATUSES = ["draft", "live", "attention", "paused", "completed"] as const;
 
@@ -55,6 +56,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (update.status === "live" && !existing.liveSince) update.liveSince = update.updatedAt;
 
     const credentials = getMetaCredentials();
+    let dailyBudgetCappedByPortfolioLimit = false;
     if (credentials && update.status === "live" && !existing.metaCampaignId) {
       // Going live for the first time: build the real Meta campaign (created
       // paused, per lib/meta-client.ts's safety default) and store its id so
@@ -69,18 +71,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!images?.["1:1"] || !images["1.91:1"] || !images["9:16"]) {
         return Response.json({ error: "Genereer eerst de advertentie-creative (alle 3 formaten) voordat je live gaat" }, { status: 400 });
       }
-      const origin = new URL(request.url).origin;
-      const toAbsolute = (url: string) => (url.startsWith("http") ? url : `${origin}${url}`);
       // maxBudgetCents is a lifetime cap (20% of the fee), not a daily
       // spend target -- Meta's daily_budget field needs the latter, so it's
       // derived rather than passed straight through (see campaign-engine.ts).
+      // That derived amount is then capped to whatever's left under the
+      // portfolio-wide daily spend limit, shared across every campaign
+      // running on Meta at once -- an individually-reasonable daily budget
+      // can still add up to more than the account should ever spend in a day.
+      const desiredDailyBudgetCents = deriveDailyBudgetCents(
+        update.maxBudgetCents ?? existing.maxBudgetCents,
+        update.campaignDurationDays ?? existing.campaignDurationDays,
+      );
+      const { headroomCents, capCents } = await getPortfolioDailyBudgetHeadroomCents(db, existing.id);
+      if (headroomCents < MIN_DAILY_BUDGET_CENTS) {
+        return Response.json(
+          { error: `Het portfolio-dagbudget van €${Math.round(capCents / 100)} is al volledig benut door andere campagnes. Pauzeer of verlaag eerst een andere campagne om ruimte te maken.` },
+          { status: 400 },
+        );
+      }
+      const actualDailyBudgetCents = Math.min(desiredDailyBudgetCents, headroomCents);
+      dailyBudgetCappedByPortfolioLimit = actualDailyBudgetCents < desiredDailyBudgetCents;
+
+      const origin = new URL(request.url).origin;
+      const toAbsolute = (url: string) => (url.startsWith("http") ? url : `${origin}${url}`);
       const { metaCampaignId, metaAdId, metaLeadFormId } = await createMetaCampaign({
         title: existing.title,
         location: existing.location,
-        dailyBudgetCents: deriveDailyBudgetCents(
-          update.maxBudgetCents ?? existing.maxBudgetCents,
-          update.campaignDurationDays ?? existing.campaignDurationDays,
-        ),
+        dailyBudgetCents: actualDailyBudgetCents,
         primaryText: update.primaryText ?? existing.primaryText,
         headline: update.headline ?? existing.headline,
         description: update.descriptionText ?? existing.descriptionText,
@@ -97,7 +114,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const [campaign] = await db.update(campaigns).set(update).where(eq(campaigns.id, id)).returning();
-    return Response.json({ campaign });
+    return Response.json({ campaign, dailyBudgetCappedByPortfolioLimit });
   } catch (error) {
     return errorResponse(error, "Campaign could not be updated");
   }
