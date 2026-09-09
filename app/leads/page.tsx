@@ -95,7 +95,7 @@ export default function LeadsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-[#91aabb]">{lead.email || "geen e-mail"} · {lead.phone || "geen telefoon"}</p>
+                  <p className="mt-1 text-xs break-words text-[#91aabb]">{lead.email || "geen e-mail"} · {lead.phone || "geen telefoon"}</p>
                   <p className="mt-2 text-xs text-[#6f8798]">{lead.campaignTitle} · {lead.campaignLocation} · {dateFormat.format(new Date(lead.receivedAt))}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

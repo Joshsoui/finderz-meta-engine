@@ -175,7 +175,7 @@ button { cursor: pointer; }
   background-image: linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px); background-size: 100% 25%;
 }
 
-.section-tabs-wrap { border-bottom: 1px solid rgba(255,255,255,.08); padding: .8rem 1.25rem; }
+.section-tabs-wrap { overflow-x: auto; border-bottom: 1px solid rgba(255,255,255,.08); padding: .8rem 1.25rem; }
 .section-tabs { display: inline-flex; gap: .3rem; }
 .section-tab {
   display: inline-flex !important; height: 2.3rem; align-items: center; gap: .45rem; border-radius: .6rem !important;

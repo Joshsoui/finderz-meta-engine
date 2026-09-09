@@ -1220,7 +1220,7 @@ export default function Home() {
             </article>
           ) : (
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1.62fr)_380px]">
-            <div className="space-y-6">
+            <div className="min-w-0 space-y-6">
               <article className="panel overflow-hidden">
                 <div className="panel-header">
                   <div><div className="eyebrow"><Activity className="size-3.5" />Live overzicht</div><h2>Campagnes</h2></div>
@@ -1367,7 +1367,7 @@ export default function Home() {
               </article>
             </div>
 
-            <aside className="space-y-6">
+            <aside className="min-w-0 space-y-6">
               <article className="panel p-5">
                 <div className="flex items-start justify-between gap-4"><div><div className="eyebrow"><BrainCircuit className="size-3.5" />Automatische analyse</div><h2 className="mt-2">Aanbevolen actie</h2></div><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]"><Zap className="size-5" /></div></div>
                 <div className="mt-5 rounded-xl border border-[#206389] bg-[#13425e] p-4"><p className="text-sm leading-6 text-[#bbced9]">{selected.recommendation}</p></div>

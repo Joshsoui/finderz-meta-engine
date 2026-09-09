@@ -281,7 +281,7 @@ export default function Pipeline() {
         <div className="flex items-center justify-center py-24 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
       ) : (
         <Tabs defaultValue="new" className="gap-4">
-          <TabsList variant="line" className="w-full justify-start gap-6 border-b border-white/8">
+          <TabsList variant="line" className="w-full justify-start gap-6 overflow-x-auto border-b border-white/8">
             <TabsTrigger value="new" className="h-11 px-0 text-[#7891a2] data-[state=active]:text-white after:bg-[#35b7df]">Nieuw ({grouped.new.length})</TabsTrigger>
             <TabsTrigger value="campaign_created" className="h-11 px-0 text-[#7891a2] data-[state=active]:text-white after:bg-[#35b7df]">Omgezet naar campagne ({grouped.campaign_created.length})</TabsTrigger>
             <TabsTrigger value="dismissed" className="h-11 px-0 text-[#7891a2] data-[state=active]:text-white after:bg-[#35b7df]">Genegeerd ({grouped.dismissed.length})</TabsTrigger>
