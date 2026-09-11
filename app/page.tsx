@@ -23,6 +23,7 @@ import {
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
   type Campaign, type CampaignRow, rowToCampaign, statusLabel,
@@ -114,23 +115,54 @@ const STANDARD_QUESTION_LABEL: Record<string, string> = {
  * same campaign -- "neutral" (not enough data to compare, or fewer than 2
  * ads with leads yet) rather than forcing a judgement on too little data.
  */
-type AdPerformanceTier = "good" | "warning" | "poor" | "neutral";
+type AdPerformanceTier = "good" | "warning" | "poor";
+type AdPerformanceInfo = { tier: AdPerformanceTier; label: string; dotClass: string; reason: string };
 
-const AD_PERFORMANCE_TIER: Record<Exclude<AdPerformanceTier, "neutral">, { label: string; dotClass: string }> = {
+const AD_PERFORMANCE_STYLE: Record<AdPerformanceTier, { label: string; dotClass: string }> = {
   good: { label: "Presteert goed", dotClass: "bg-[#4ade80]" },
   warning: { label: "Let op", dotClass: "bg-[#df9826]" },
   poor: { label: "Presteert slecht", dotClass: "bg-[#d65a61]" },
 };
 
-function getAdPerformanceTier(ad: CampaignAd, activeAds: CampaignAd[]): AdPerformanceTier {
+/**
+ * How one active ad's cost/lead compares to the best-performing sibling ad
+ * in the same campaign -- null (not shown) rather than forcing a judgement
+ * when there aren't at least 2 active ads with leads yet to compare against.
+ * Carries a plain-language reason so the badge isn't just a color someone
+ * has to guess the meaning of -- it's the thing you'd read before deciding
+ * whether to pause the ad right there in the same row.
+ */
+function getAdPerformanceInfo(ad: CampaignAd, activeAds: CampaignAd[]): AdPerformanceInfo | null {
   const comparable = activeAds.filter((other) => other.leads > 0);
-  if (comparable.length < 2) return "neutral";
+  if (comparable.length < 2) return null;
   const bestCpl = Math.min(...comparable.map((other) => other.spend / other.leads));
-  if (ad.leads === 0) return ad.spend > bestCpl * 2 ? "poor" : "neutral";
+
+  if (ad.leads === 0) {
+    if (ad.spend <= bestCpl * 2) return null;
+    return {
+      tier: "poor",
+      ...AD_PERFORMANCE_STYLE.poor,
+      reason: `Al ${euro.format(ad.spend)} uitgegeven zonder een lead, terwijl de best presterende advertentie in deze campagne op ${euro.format(bestCpl)} per lead zit.`,
+    };
+  }
+
   const cpl = ad.spend / ad.leads;
-  if (cpl <= bestCpl * 1.25) return "good";
-  if (cpl <= bestCpl * 2) return "warning";
-  return "poor";
+  const diffPercent = Math.round(((cpl - bestCpl) / bestCpl) * 100);
+  if (cpl <= bestCpl * 1.25) {
+    return { tier: "good", ...AD_PERFORMANCE_STYLE.good, reason: `Beste (of bijna beste) kosten per lead van deze campagne: ${euro.format(cpl)} per lead.` };
+  }
+  if (cpl <= bestCpl * 2) {
+    return {
+      tier: "warning",
+      ...AD_PERFORMANCE_STYLE.warning,
+      reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% hoger dan de best presterende advertentie in deze campagne (${euro.format(bestCpl)}).`,
+    };
+  }
+  return {
+    tier: "poor",
+    ...AD_PERFORMANCE_STYLE.poor,
+    reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% hoger dan de best presterende advertentie in deze campagne (${euro.format(bestCpl)}). Overweeg deze te pauzeren.`,
+  };
 }
 
 function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
@@ -193,8 +225,7 @@ function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
         <div className="divide-y divide-white/8">
           {filtered.map((ad) => {
             const stoplicht = AD_MANAGER_STATUS[ad.effectiveStatus] ?? { label: ad.effectiveStatus, statusClass: "status-attention" };
-            const tier = ad.effectiveStatus === "ACTIVE" ? getAdPerformanceTier(ad, activeAds) : "neutral";
-            const tierInfo = tier !== "neutral" ? AD_PERFORMANCE_TIER[tier] : undefined;
+            const performance = ad.effectiveStatus === "ACTIVE" ? getAdPerformanceInfo(ad, activeAds) : null;
             return (
               <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={ad.id}>
                 <div className="flex min-w-0 items-center gap-3">
@@ -206,7 +237,16 @@ function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
-                      {tierInfo && <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#91aabb]"><span className={"size-2 shrink-0 rounded-full " + tierInfo.dotClass} />{tierInfo.label}</span>}
+                      {performance && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex cursor-default items-center gap-1.5 text-xs font-semibold text-[#91aabb] underline decoration-dotted decoration-[#4a6478] underline-offset-2">
+                              <span className={"size-2 shrink-0 rounded-full " + performance.dotClass} />{performance.label}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-64">{performance.reason}</TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
                     <p className="mt-1 truncate text-sm font-medium text-white">{ad.name}</p>
                   </div>
