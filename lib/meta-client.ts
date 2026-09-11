@@ -103,13 +103,24 @@ async function fetchPageAccessToken(credentials: MetaCredentials): Promise<strin
   return page.access_token;
 }
 
-async function createLeadForm(credentials: MetaCredentials, title: string, otysVacancyId?: string): Promise<string> {
+/** A question in a Meta lead form -- one of Meta's fixed "standard" field
+ * types (FULL_NAME, EMAIL, PHONE, ...), or a free-text CUSTOM question with
+ * its own label. */
+export type LeadFormQuestion =
+  | { type: "FULL_NAME" | "EMAIL" | "PHONE" | "CITY" | "COMPANY_NAME" | "JOB_TITLE" }
+  | { type: "CUSTOM"; key: string; label: string };
+
+const STANDARD_QUESTION: Array<{ type: "FULL_NAME" | "EMAIL" | "PHONE" | "CITY" | "COMPANY_NAME" | "JOB_TITLE" }> = [
+  { type: "FULL_NAME" }, { type: "EMAIL" }, { type: "PHONE" },
+];
+
+async function createLeadForm(credentials: MetaCredentials, title: string, otysVacancyId?: string, questions: LeadFormQuestion[] = STANDARD_QUESTION): Promise<string> {
   const pageAccessToken = await fetchPageAccessToken(credentials);
   const result = await metaRequest<{ id: string }>(`/${credentials.pageId}/leadgen_forms`, pageAccessToken, {
     method: "POST",
     params: {
       name: `${title} - sollicitatieformulier`,
-      questions: JSON.stringify([{ type: "FULL_NAME" }, { type: "EMAIL" }, { type: "PHONE" }]),
+      questions: JSON.stringify(questions),
       privacy_policy: JSON.stringify({ url: "https://finderzkeeperz.nl/privacy", link_text: "Privacybeleid" }),
       locale: "nl_NL",
       // Invisible to the applicant, but returned with every lead fetched via
@@ -122,6 +133,48 @@ async function createLeadForm(credentials: MetaCredentials, title: string, otysV
     },
   });
   return result.id;
+}
+
+/**
+ * Creates a brand-new lead form with a custom set of questions -- used by
+ * the "Nieuw leadformulier maken" flow, not the default 3-field form every
+ * campaign gets automatically. Meta has no way to edit an existing form's
+ * questions once created (only archive it), so this is the only path to a
+ * different question set: a new form, not an edit of the old one. The new
+ * form is NOT attached to any running ad -- doing that requires a new ad
+ * (Meta doesn't allow swapping an existing ad's creative), which is a
+ * separate, deliberate action, not implied by just creating a form.
+ */
+export async function createCustomLeadForm(title: string, questions: LeadFormQuestion[], otysVacancyId?: string): Promise<{ id: string; name: string }> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+  if (questions.length === 0) throw new Error("Een leadformulier heeft minstens één vraag nodig");
+  const id = await createLeadForm(credentials, title, otysVacancyId, questions);
+  return { id, name: `${title} - sollicitatieformulier` };
+}
+
+export type LeadFormDetails = { id: string; name: string; status: string; questions: LeadFormQuestion[]; locale?: string };
+
+/** Read-only: the current questions on an existing lead form, for display -- Meta has no edit endpoint for these, only view. */
+export async function fetchLeadForm(formId: string): Promise<LeadFormDetails> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+  const result = await metaRequest<{ id: string; name: string; status: string; locale?: string; questions?: Array<{ type: string; key?: string; label?: string }> }>(
+    `/${formId}`,
+    credentials.accessToken,
+    { params: { fields: "name,status,locale,questions" } },
+  );
+  return {
+    id: result.id,
+    name: result.name,
+    status: result.status,
+    locale: result.locale,
+    questions: (result.questions ?? []).map((question) =>
+      question.type === "CUSTOM"
+        ? { type: "CUSTOM", key: question.key ?? "", label: question.label ?? "" }
+        : { type: question.type as Exclude<LeadFormQuestion, { type: "CUSTOM" }>["type"] }
+    ),
+  };
 }
 
 async function uploadAdImage(credentials: MetaCredentials, imageUrl: string): Promise<{ hash: string }> {
@@ -489,6 +542,55 @@ export async function fetchLeadFormIdForCampaign(metaCampaignId: string): Promis
     if (formId) return formId;
   }
   return undefined;
+}
+
+export type MetaCampaignAd = {
+  id: string;
+  name: string;
+  status: string;
+  effectiveStatus: string;
+  thumbnailUrl?: string;
+  spend: number;
+  leads: number;
+};
+
+/**
+ * Lists the individual ads inside one campaign -- which specific ad is
+ * running and how it's performing, plus a small preview image of its
+ * creative. We don't control which *placement* (Feed, Reels, Stories, ...)
+ * an ad shows in, Meta's delivery system does, so this is the breakdown
+ * that's actually actionable: which ad to pause, refresh, or duplicate.
+ */
+export async function fetchCampaignAds(metaCampaignId: string): Promise<MetaCampaignAd[]> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const result = await metaRequest<{
+    data?: Array<{
+      id: string;
+      name: string;
+      status: string;
+      effective_status: string;
+      creative?: { thumbnail_url?: string };
+      insights?: { data?: Array<{ spend?: string; actions?: Array<{ action_type: string; value: string }> }> };
+    }>;
+  }>(`/${metaCampaignId}/ads`, credentials.accessToken, {
+    params: { fields: "name,status,effective_status,creative{thumbnail_url},insights.date_preset(maximum){spend,actions}", limit: 50 },
+  });
+
+  return (result.data ?? []).map((ad) => {
+    const insightsRow = ad.insights?.data?.[0];
+    const leadAction = insightsRow?.actions?.find((action) => action.action_type === "lead" || action.action_type === "leadgen.other");
+    return {
+      id: ad.id,
+      name: ad.name,
+      status: ad.status,
+      effectiveStatus: ad.effective_status,
+      thumbnailUrl: ad.creative?.thumbnail_url,
+      spend: Number(insightsRow?.spend ?? 0),
+      leads: Number(leadAction?.value ?? 0),
+    };
+  });
 }
 
 export type MetaLead = { metaLeadId: string; fullName: string; email: string; phone: string; receivedAt: string };

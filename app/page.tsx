@@ -12,6 +12,7 @@ import {
 import { AppShell, FinderzMark } from "@/components/app-shell";
 import { CreativePreview } from "@/components/creative-preview";
 import { type ImportCandidate, ImportCampaignSheet } from "@/components/import-campaign-sheet";
+import { LeadFormSheet } from "@/components/lead-form-sheet";
 import { NewCampaignSheet } from "@/components/new-campaign-sheet";
 import { PortfolioBudgetCard } from "@/components/portfolio-budget-card";
 import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
@@ -92,49 +93,63 @@ function formatRelativeTime(iso: string | null | undefined): string | null {
 
 type HistoryPoint = { recordedAt: string; cpl: number | null };
 
-type PlacementBreakdown = { platform: string; position: string; spend: number; impressions: number; clicks: number; leads: number };
+type CampaignAd = { id: string; name: string; status: string; effectiveStatus: string; thumbnailUrl?: string; spend: number; leads: number };
 
-// Meta's own labels for publisher_platform / platform_position; not every
-// value is documented, so anything not listed here just shows the raw value
-// from Meta rather than guessing at a translation.
-const PLATFORM_LABEL: Record<string, string> = { facebook: "Facebook", instagram: "Instagram", audience_network: "Audience Network", messenger: "Messenger" };
-const POSITION_LABEL: Record<string, string> = {
-  feed: "Feed", story: "Stories", reels: "Reels", facebook_reels: "Reels",
-  video_feeds: "Video feed", marketplace: "Marketplace", right_hand_column: "Zijbalk",
-  search: "Zoeken", instream_banner: "In-stream", stream: "Feed", explore: "Verkennen", explore_home: "Verkennen",
+type LeadFormQuestion = { type: string; key?: string; label?: string };
+type LeadFormDetails = { id: string; name: string; status: string; questions: LeadFormQuestion[]; locale?: string };
+
+const STANDARD_QUESTION_LABEL: Record<string, string> = {
+  FULL_NAME: "Volledige naam", EMAIL: "E-mailadres", PHONE: "Telefoonnummer",
+  CITY: "Woonplaats", COMPANY_NAME: "Bedrijfsnaam", JOB_TITLE: "Functietitel",
 };
 
-function PlacementTable({ placements, connected }: { placements: PlacementBreakdown[]; connected: boolean }) {
+/**
+ * Which specific ad is running inside this campaign, with a creative
+ * preview -- we don't control which *placement* (Feed, Reels, Stories, ...)
+ * an ad shows in, Meta's delivery system does, so a breakdown per ad is the
+ * one that's actually actionable: which ad to pause, refresh, or duplicate.
+ */
+function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: boolean }) {
   if (!connected) {
     return (
       <div className="panel">
-        <div className="panel-header"><p className="text-sm font-semibold text-white">Resultaat per plaatsing</p></div>
-        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Beschikbaar zodra deze campagne aan Meta gekoppeld is — dan zie ik hier of Feed, Stories of Reels de beste leads oplevert.</p>
+        <div className="panel-header"><p className="text-sm font-semibold text-white">Advertenties</p></div>
+        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Beschikbaar zodra deze campagne aan Meta gekoppeld is.</p>
       </div>
     );
   }
-  const sorted = placements.slice().sort((a, b) => b.spend - a.spend);
+  const sorted = ads.slice().sort((a, b) => b.spend - a.spend);
   return (
-    <div className="panel">
-      <div className="panel-header"><p className="text-sm font-semibold text-white">Resultaat per plaatsing</p><p className="mt-1 text-xs text-[#607b8d]">Waar de leads vandaan komen — zo weet ik waar ik het budget op moet richten</p></div>
+    <div className="panel overflow-hidden">
+      <div className="panel-header"><p className="text-sm font-semibold text-white">Advertenties</p><p className="mt-1 text-xs text-[#607b8d]">Welke advertentie draait, en hoe die het doet</p></div>
       {sorted.length === 0 ? (
-        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Nog geen data per plaatsing — komt zodra deze campagne wat langer draait.</p>
+        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Nog geen advertenties gevonden voor deze campagne.</p>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow><TableHead>Plaatsing</TableHead><TableHead>Uitgegeven</TableHead><TableHead>Leads</TableHead><TableHead>Kosten/lead</TableHead></TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.map((row, index) => (
-              <TableRow key={`${row.platform}-${row.position}-${index}`}>
-                <TableCell>{PLATFORM_LABEL[row.platform] ?? row.platform} · {POSITION_LABEL[row.position] ?? row.position}</TableCell>
-                <TableCell>{euro.format(row.spend)}</TableCell>
-                <TableCell>{row.leads}</TableCell>
-                <TableCell>{row.leads > 0 ? euro.format(row.spend / row.leads) : "—"}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="divide-y divide-white/8">
+          {sorted.map((ad) => {
+            const stoplicht = AD_MANAGER_STATUS[ad.effectiveStatus] ?? { label: ad.effectiveStatus, statusClass: "status-attention" };
+            return (
+              <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={ad.id}>
+                <div className="flex min-w-0 items-center gap-3">
+                  {ad.thumbnailUrl ? (
+                    <img src={ad.thumbnailUrl} alt="" className="size-11 shrink-0 rounded-lg border border-white/10 object-cover" />
+                  ) : (
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[#607b8d]"><ImageIcon className="size-4" /></div>
+                  )}
+                  <div className="min-w-0">
+                    <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
+                    <p className="mt-1 truncate text-sm font-medium text-white">{ad.name}</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-5 text-right text-sm">
+                  <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="text-white">{euro.format(ad.spend)}</strong></div>
+                  <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="text-white">{ad.leads}</strong></div>
+                  <div><span className="block text-xs text-[#607b8d]">Kosten/lead</span><strong className="text-white">{ad.leads > 0 ? euro.format(ad.spend / ad.leads) : "—"}</strong></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -831,8 +846,11 @@ export default function Home() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [recentActions, setRecentActions] = useState<OptimizationAction[]>([]);
   const [campaignHistory, setCampaignHistory] = useState<HistoryPoint[]>([]);
-  const [placements, setPlacements] = useState<PlacementBreakdown[]>([]);
-  const [placementsConnected, setPlacementsConnected] = useState(false);
+  const [campaignAds, setCampaignAds] = useState<CampaignAd[]>([]);
+  const [campaignAdsConnected, setCampaignAdsConnected] = useState(false);
+  const [leadForm, setLeadForm] = useState<LeadFormDetails | null>(null);
+  const [leadFormConnected, setLeadFormConnected] = useState(false);
+  const [isNewLeadFormOpen, setIsNewLeadFormOpen] = useState(false);
   // Bumped whenever Meta or Indeed daily spend is saved, so the combined
   // MarketingSpendCard (which only fetches once on mount) refetches instead
   // of showing a stale total from before that edit.
@@ -929,25 +947,50 @@ export default function Home() {
     (async () => {
       if (!selected) {
         if (!cancelled) {
-          setPlacements([]);
-          setPlacementsConnected(false);
+          setCampaignAds([]);
+          setCampaignAdsConnected(false);
         }
         return;
       }
       try {
-        const response = await fetch(`/api/campaigns/${selected.id}/placements`);
-        const payload = await response.json() as { placements?: PlacementBreakdown[]; connected?: boolean; error?: string };
+        const response = await fetch(`/api/campaigns/${selected.id}/ads`);
+        const payload = await response.json() as { ads?: CampaignAd[]; connected?: boolean; error?: string };
         if (response.ok && !cancelled) {
-          setPlacements(payload.placements ?? []);
-          setPlacementsConnected(Boolean(payload.connected));
+          setCampaignAds(payload.ads ?? []);
+          setCampaignAdsConnected(Boolean(payload.connected));
         }
       } catch {
-        // The performance tab still works without a placement breakdown; fail quietly.
+        // The performance tab still works without an ad breakdown; fail quietly.
       }
     })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  async function refetchLeadForm(campaignId: string) {
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/lead-form`);
+      const payload = await response.json() as { form?: LeadFormDetails | null; connected?: boolean; error?: string };
+      if (response.ok) {
+        setLeadForm(payload.form ?? null);
+        setLeadFormConnected(Boolean(payload.connected));
+      }
+    } catch {
+      // The performance tab still works without the lead form view; fail quietly.
+    }
+  }
+
+  useEffect(() => {
+    (async () => {
+      if (!selected) {
+        setLeadForm(null);
+        setLeadFormConnected(false);
+        return;
+      }
+      await refetchLeadForm(selected.id);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
@@ -1166,6 +1209,16 @@ export default function Home() {
     >
           <ImportCampaignSheet candidate={importCandidate} onClose={() => setImportCandidate(null)} onImported={addCampaign} />
 
+          {selected && (
+            <LeadFormSheet
+              open={isNewLeadFormOpen}
+              campaignId={selected.id}
+              campaignTitle={selected.title}
+              onClose={() => setIsNewLeadFormOpen(false)}
+              onCreated={() => void refetchLeadForm(selected.id)}
+            />
+          )}
+
           <MarketingSpendCard key={spendVersion} isMetaAutomatic={metaStatus.mode === "connected"} platformTotalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
           <TodaySpendByCampaignCard key={"breakdown-" + spendVersion} />
@@ -1320,7 +1373,27 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="mt-6">
-                      <PlacementTable placements={placements} connected={placementsConnected} />
+                      <AdBreakdownTable ads={campaignAds} connected={campaignAdsConnected} />
+                    </div>
+                    <div className="mt-6 panel overflow-hidden">
+                      <div className="panel-header">
+                        <div><p className="text-sm font-semibold text-white">Leadformulier</p><p className="mt-1 text-xs text-[#607b8d]">De vragen die een sollicitant te zien krijgt bij het invullen</p></div>
+                        {leadFormConnected && (
+                          <button className="secondary-button shrink-0" onClick={() => setIsNewLeadFormOpen(true)}><Plus className="size-4" />Nieuw leadformulier</button>
+                        )}
+                      </div>
+                      {!leadFormConnected ? (
+                        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Beschikbaar zodra deze campagne aan Meta gekoppeld is.</p>
+                      ) : !leadForm ? (
+                        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Nog geen leadformulier gevonden voor deze campagne.</p>
+                      ) : (
+                        <div className="space-y-2 px-5 pb-5">
+                          {leadForm.questions.map((question, index) => (
+                            <div className="content-box" key={index}>{question.type === "CUSTOM" ? question.label : STANDARD_QUESTION_LABEL[question.type] ?? question.type}</div>
+                          ))}
+                          <p className="pt-1 text-xs leading-5 text-[#607b8d]">Meta laat een eenmaal aangemaakt formulier niet meer bewerken — alleen archiveren. &quot;Nieuw leadformulier&quot; maakt een nieuw formulier aan; die moet je daarna zelf aan een (nieuwe) advertentie koppelen in Meta Ads Manager.</p>
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
                   <TabsContent value="creative" className="p-5">
