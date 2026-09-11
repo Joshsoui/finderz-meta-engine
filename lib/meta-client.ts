@@ -628,6 +628,13 @@ export async function setMetaCampaignStatus(metaCampaignId: string, status: "ACT
   await metaRequest(`/${metaCampaignId}`, credentials.accessToken, { method: "POST", params: { status } });
 }
 
+/** Pauses or resumes one individual ad -- used to stop an underperforming ad within a campaign without touching the campaign or its other ads. */
+export async function setMetaAdStatus(metaAdId: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+  await metaRequest(`/${metaAdId}`, credentials.accessToken, { method: "POST", params: { status } });
+}
+
 /** Updates the campaign-level daily budget (Advantage Campaign Budget) -- used by the "scale budget" automation rule. */
 export async function updateMetaCampaignBudget(metaCampaignId: string, dailyBudgetCents: number): Promise<void> {
   const credentials = getMetaCredentials();

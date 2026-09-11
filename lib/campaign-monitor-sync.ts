@@ -1,11 +1,46 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { campaigns, leads, metaSyncHealth, metricSnapshots, optimizationActions } from "@/db/schema";
 import { syncAccountSpendSummary } from "@/lib/account-spend-sync";
 import { evaluateCampaign } from "@/lib/campaign-engine";
 import { syncAutomaticDailySpend } from "@/lib/daily-spend-sync";
 import { syncIndeedDailyCarryForward } from "@/lib/indeed-spend-sync";
-import { fetchAdStatus, fetchCampaignInsights, fetchLeadFormIdForCampaign, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
+import {
+  fetchAdStatus, fetchAllAccountCampaigns, fetchCampaignInsights, fetchLeadFormIdForCampaign, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus,
+} from "@/lib/meta-client";
+
+/**
+ * A campaign paused or resumed directly in Meta Ads Manager (bypassing this
+ * platform) never told us -- our own status field only changes when *we*
+ * pause/resume it, or when our own rules flag "attention". Left alone, a
+ * campaign someone paused straight in Meta keeps showing as live/attention
+ * here indefinitely. Reconciles both directions using one whole-account
+ * call (the same data /api/meta/all-campaigns already fetches on demand),
+ * rather than one extra call per tracked campaign.
+ */
+async function reconcileCampaignStatuses(db: Awaited<ReturnType<typeof getDb>>): Promise<void> {
+  const tracked = await db
+    .select({ id: campaigns.id, status: campaigns.status, metaCampaignId: campaigns.metaCampaignId })
+    .from(campaigns)
+    .where(and(isNotNull(campaigns.metaCampaignId), inArray(campaigns.status, ["live", "attention", "paused"])));
+  if (tracked.length === 0) return;
+
+  const accountCampaigns = await fetchAllAccountCampaigns();
+  const realStatusByMetaId = new Map(accountCampaigns.map((campaign) => [campaign.id, campaign.effectiveStatus]));
+
+  const now = new Date().toISOString();
+  for (const campaign of tracked) {
+    const realStatus = realStatusByMetaId.get(campaign.metaCampaignId!);
+    if (!realStatus) continue;
+    const reallyPaused = realStatus === "PAUSED" || realStatus === "ARCHIVED" || realStatus === "DELETED";
+    const reallyActive = realStatus === "ACTIVE";
+    if (reallyPaused && campaign.status !== "paused") {
+      await db.update(campaigns).set({ status: "paused", updatedAt: now }).where(eq(campaigns.id, campaign.id));
+    } else if (reallyActive && campaign.status === "paused") {
+      await db.update(campaigns).set({ status: "live", updatedAt: now }).where(eq(campaigns.id, campaign.id));
+    }
+  }
+}
 
 async function recordMetaSyncResult(db: Awaited<ReturnType<typeof getDb>>, error?: unknown) {
   const now = new Date().toISOString();
@@ -243,6 +278,11 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
       await syncAccountSpendSummary();
     } catch (error) {
       console.error("Account-wide spend sync failed", error);
+    }
+    try {
+      await reconcileCampaignStatuses(db);
+    } catch (error) {
+      console.error("Campaign status reconciliation failed", error);
     }
   }
 

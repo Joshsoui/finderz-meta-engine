@@ -109,8 +109,58 @@ const STANDARD_QUESTION_LABEL: Record<string, string> = {
  * an ad shows in, Meta's delivery system does, so a breakdown per ad is the
  * one that's actually actionable: which ad to pause, refresh, or duplicate.
  */
-function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: boolean }) {
+/**
+ * How one ad's cost/lead compares to the best-performing sibling ad in the
+ * same campaign -- "neutral" (not enough data to compare, or fewer than 2
+ * ads with leads yet) rather than forcing a judgement on too little data.
+ */
+type AdPerformanceTier = "good" | "warning" | "poor" | "neutral";
+
+const AD_PERFORMANCE_TIER: Record<Exclude<AdPerformanceTier, "neutral">, { label: string; dotClass: string }> = {
+  good: { label: "Presteert goed", dotClass: "bg-[#4ade80]" },
+  warning: { label: "Let op", dotClass: "bg-[#df9826]" },
+  poor: { label: "Presteert slecht", dotClass: "bg-[#d65a61]" },
+};
+
+function getAdPerformanceTier(ad: CampaignAd, activeAds: CampaignAd[]): AdPerformanceTier {
+  const comparable = activeAds.filter((other) => other.leads > 0);
+  if (comparable.length < 2) return "neutral";
+  const bestCpl = Math.min(...comparable.map((other) => other.spend / other.leads));
+  if (ad.leads === 0) return ad.spend > bestCpl * 2 ? "poor" : "neutral";
+  const cpl = ad.spend / ad.leads;
+  if (cpl <= bestCpl * 1.25) return "good";
+  if (cpl <= bestCpl * 2) return "warning";
+  return "poor";
+}
+
+function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
+  ads: CampaignAd[];
+  connected: boolean;
+  campaignId: string;
+  onAdStatusChanged: (adId: string, effectiveStatus: string) => void;
+}) {
   const [statusFilter, setStatusFilter] = useState<"active" | "all">("active");
+  const [pausingId, setPausingId] = useState<string | null>(null);
+
+  async function toggleAdStatus(ad: CampaignAd) {
+    const nextStatus = ad.effectiveStatus === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    setPausingId(ad.id);
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/ads/${ad.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Advertentiestatus kon niet worden gewijzigd.");
+      onAdStatusChanged(ad.id, nextStatus);
+      toast.success(nextStatus === "PAUSED" ? "Advertentie gepauzeerd" : "Advertentie hervat");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Advertentiestatus kon niet worden gewijzigd.");
+    } finally {
+      setPausingId(null);
+    }
+  }
 
   if (!connected) {
     return (
@@ -121,8 +171,9 @@ function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: bo
     );
   }
   const sorted = ads.slice().sort((a, b) => b.spend - a.spend);
-  const activeCount = sorted.filter((ad) => ad.effectiveStatus === "ACTIVE").length;
-  const filtered = statusFilter === "active" ? sorted.filter((ad) => ad.effectiveStatus === "ACTIVE") : sorted;
+  const activeAds = sorted.filter((ad) => ad.effectiveStatus === "ACTIVE");
+  const activeCount = activeAds.length;
+  const filtered = statusFilter === "active" ? activeAds : sorted;
   return (
     <div className="panel overflow-hidden">
       <div className="panel-header">
@@ -142,6 +193,8 @@ function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: bo
         <div className="divide-y divide-white/8">
           {filtered.map((ad) => {
             const stoplicht = AD_MANAGER_STATUS[ad.effectiveStatus] ?? { label: ad.effectiveStatus, statusClass: "status-attention" };
+            const tier = ad.effectiveStatus === "ACTIVE" ? getAdPerformanceTier(ad, activeAds) : "neutral";
+            const tierInfo = tier !== "neutral" ? AD_PERFORMANCE_TIER[tier] : undefined;
             return (
               <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={ad.id}>
                 <div className="flex min-w-0 items-center gap-3">
@@ -151,7 +204,10 @@ function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: bo
                     <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-[#607b8d]"><ImageIcon className="size-4" /></div>
                   )}
                   <div className="min-w-0">
-                    <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
+                      {tierInfo && <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#91aabb]"><span className={"size-2 shrink-0 rounded-full " + tierInfo.dotClass} />{tierInfo.label}</span>}
+                    </div>
                     <p className="mt-1 truncate text-sm font-medium text-white">{ad.name}</p>
                   </div>
                 </div>
@@ -159,6 +215,12 @@ function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: bo
                   <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="text-white">{euro.format(ad.spend)}</strong></div>
                   <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="text-white">{ad.leads}</strong></div>
                   <div><span className="block text-xs text-[#607b8d]">Kosten/lead</span><strong className="text-white">{ad.leads > 0 ? euro.format(ad.spend / ad.leads) : "—"}</strong></div>
+                  {(ad.effectiveStatus === "ACTIVE" || ad.effectiveStatus === "PAUSED") && (
+                    <button className="secondary-button" onClick={() => void toggleAdStatus(ad)} disabled={pausingId === ad.id}>
+                      {pausingId === ad.id ? <LoaderCircle className="size-4 animate-spin" /> : ad.effectiveStatus === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
+                      {ad.effectiveStatus === "ACTIVE" ? "Pauzeer" : "Hervat"}
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -254,7 +316,7 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
   const [connected, setConnected] = useState(false);
   const [campaigns, setCampaigns] = useState<AdManagerCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active">("active");
 
   useEffect(() => {
     let cancelled = false;
@@ -586,7 +648,7 @@ function IndeedSpendCard({ onSpendSaved }: { onSpendSaved?: () => void }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active">("active");
 
   useEffect(() => {
     let cancelled = false;
@@ -936,9 +998,9 @@ export default function Home() {
     };
   }, [campaigns]);
 
-  const tableActiveCount = campaigns.filter((campaign) => campaign.status === "live" || campaign.status === "attention").length;
+  const tableActiveCount = campaigns.filter((campaign) => campaign.status === "live").length;
   const filteredTableCampaigns = tableStatusFilter === "active"
-    ? campaigns.filter((campaign) => campaign.status === "live" || campaign.status === "attention")
+    ? campaigns.filter((campaign) => campaign.status === "live")
     : campaigns;
 
   useEffect(() => {
@@ -1519,7 +1581,12 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="mt-6">
-                      <AdBreakdownTable ads={campaignAds} connected={campaignAdsConnected} />
+                      <AdBreakdownTable
+                        ads={campaignAds}
+                        connected={campaignAdsConnected}
+                        campaignId={selected.id}
+                        onAdStatusChanged={(adId, effectiveStatus) => setCampaignAds((current) => current.map((ad) => (ad.id === adId ? { ...ad, status: effectiveStatus, effectiveStatus } : ad)))}
+                      />
                     </div>
                     <div className="mt-6 panel overflow-hidden">
                       <div className="panel-header">
