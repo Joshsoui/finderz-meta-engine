@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { campaigns, leads, metricSnapshots, optimizationActions, pipelineVacancies } from "@/db/schema";
 import { errorResponse } from "@/lib/api-error";
 import { deriveDailyBudgetCents, MIN_DAILY_BUDGET_CENTS } from "@/lib/campaign-engine";
-import { createMetaCampaign, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
+import { createMetaCampaign, getMetaCredentials, setMetaCampaignStatus, updateMetaCampaignBudget } from "@/lib/meta-client";
 import { getPortfolioDailyBudgetHeadroomCents } from "@/lib/portfolio-budget";
 
 const CAMPAIGN_STATUSES = ["draft", "live", "attention", "paused", "completed"] as const;
@@ -111,6 +111,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await setMetaCampaignStatus(existing.metaCampaignId, "PAUSED");
     } else if (credentials && existing.metaCampaignId && update.status === "live") {
       await setMetaCampaignStatus(existing.metaCampaignId, "ACTIVE");
+    } else if (
+      credentials && existing.metaCampaignId &&
+      (existing.status === "live" || existing.status === "attention") &&
+      Number.isFinite(input.campaignDurationDays)
+    ) {
+      // A human directly changing the daily budget on an already-live
+      // campaign -- e.g. "kan je deze €20 ophogen" -- should actually reach
+      // Meta, not just update our own number while the real campaign keeps
+      // spending at the old rate. Only increases are capped by the portfolio
+      // daily limit; a deliberate decrease is never blocked by it.
+      const newMaxBudgetCents = update.maxBudgetCents ?? existing.maxBudgetCents;
+      const desiredDailyBudgetCents = deriveDailyBudgetCents(newMaxBudgetCents, update.campaignDurationDays!);
+      const currentDailyBudgetCents = deriveDailyBudgetCents(existing.maxBudgetCents, existing.campaignDurationDays);
+      let actualDailyBudgetCents = desiredDailyBudgetCents;
+      if (desiredDailyBudgetCents > currentDailyBudgetCents) {
+        const { headroomCents } = await getPortfolioDailyBudgetHeadroomCents(db, existing.id);
+        actualDailyBudgetCents = Math.min(desiredDailyBudgetCents, headroomCents);
+        dailyBudgetCappedByPortfolioLimit = actualDailyBudgetCents < desiredDailyBudgetCents;
+        if (actualDailyBudgetCents < MIN_DAILY_BUDGET_CENTS) {
+          return Response.json(
+            { error: `Er is geen ruimte meer onder het maximale dagbudget om dit te verhogen. Pauzeer of verlaag eerst een andere campagne.` },
+            { status: 400 },
+          );
+        }
+      }
+      await updateMetaCampaignBudget(existing.metaCampaignId, actualDailyBudgetCents);
+      // Store the duration that actually corresponds to what Meta now runs,
+      // not the one the human typed, if the portfolio limit capped it.
+      update.campaignDurationDays = Math.max(1, Math.round(newMaxBudgetCents / actualDailyBudgetCents));
     }
 
     const [campaign] = await db.update(campaigns).set(update).where(eq(campaigns.id, id)).returning();

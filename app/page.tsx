@@ -110,6 +110,8 @@ const STANDARD_QUESTION_LABEL: Record<string, string> = {
  * one that's actually actionable: which ad to pause, refresh, or duplicate.
  */
 function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: boolean }) {
+  const [statusFilter, setStatusFilter] = useState<"active" | "all">("active");
+
   if (!connected) {
     return (
       <div className="panel">
@@ -119,14 +121,26 @@ function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: bo
     );
   }
   const sorted = ads.slice().sort((a, b) => b.spend - a.spend);
+  const activeCount = sorted.filter((ad) => ad.effectiveStatus === "ACTIVE").length;
+  const filtered = statusFilter === "active" ? sorted.filter((ad) => ad.effectiveStatus === "ACTIVE") : sorted;
   return (
     <div className="panel overflow-hidden">
-      <div className="panel-header"><p className="text-sm font-semibold text-white">Advertenties</p><p className="mt-1 text-xs text-[#607b8d]">Welke advertentie draait, en hoe die het doet</p></div>
+      <div className="panel-header">
+        <div><p className="text-sm font-semibold text-white">Advertenties</p><p className="mt-1 text-xs text-[#607b8d]">Welke advertentie draait, en hoe die het doet</p></div>
+        {sorted.length > 0 && (
+          <div className="format-switch shrink-0">
+            <button className={statusFilter === "active" ? "active" : ""} onClick={() => setStatusFilter("active")}>Actief<span>{activeCount}</span></button>
+            <button className={statusFilter === "all" ? "active" : ""} onClick={() => setStatusFilter("all")}>Alle<span>{sorted.length}</span></button>
+          </div>
+        )}
+      </div>
       {sorted.length === 0 ? (
         <p className="px-5 pb-5 text-sm text-[#7f97a8]">Nog geen advertenties gevonden voor deze campagne.</p>
+      ) : filtered.length === 0 ? (
+        <p className="px-5 pb-5 text-sm text-[#7f97a8]">Geen actieve advertenties.</p>
       ) : (
         <div className="divide-y divide-white/8">
-          {sorted.map((ad) => {
+          {filtered.map((ad) => {
             const stoplicht = AD_MANAGER_STATUS[ad.effectiveStatus] ?? { label: ad.effectiveStatus, statusClass: "status-attention" };
             return (
               <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={ad.id}>
@@ -151,6 +165,31 @@ function AdBreakdownTable({ ads, connected }: { ads: CampaignAd[]; connected: bo
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A recognizable mock of what a candidate actually sees on Meta -- the same
+ * white-card, blue-button look as the real thing -- rather than a plain list
+ * of field names. The whole point of building this in-platform is to need
+ * Meta Ads Manager as little as possible, so it should look like "the form",
+ * not like a settings list someone has to translate in their head.
+ */
+function LeadFormPreview({ form }: { form: LeadFormDetails }) {
+  return (
+    <div className="mx-auto w-full max-w-[280px] overflow-hidden rounded-2xl border border-black/10 bg-white text-[#1c1e21] shadow-xl">
+      <div className="border-b border-black/10 px-4 py-3 text-center text-sm font-semibold">{form.name}</div>
+      <div className="space-y-2.5 p-4">
+        {form.questions.map((question, index) => (
+          <div className="truncate rounded-lg border border-black/15 bg-[#f5f6f7] px-3 py-2.5 text-sm text-[#65676b]" key={index}>
+            {question.type === "CUSTOM" ? question.label : STANDARD_QUESTION_LABEL[question.type] ?? question.type}
+          </div>
+        ))}
+      </div>
+      <div className="px-4 pb-4">
+        <div className="rounded-lg bg-[#1877f2] py-2.5 text-center text-sm font-semibold text-white">Verzenden</div>
+      </div>
     </div>
   );
 }
@@ -851,6 +890,10 @@ export default function Home() {
   const metaStatus = useMetaStatus();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedId, setSelectedId] = useState<string>();
+  const [tableStatusFilter, setTableStatusFilter] = useState<"active" | "all">("active");
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [budgetDraft, setBudgetDraft] = useState("");
+  const [isSavingBudget, setIsSavingBudget] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [creativeFormat, setCreativeFormat] = useState<CreativeFormat>("1:1");
   const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
@@ -892,6 +935,11 @@ export default function Home() {
       budgetUsed: maxBudget ? Math.min((spend / maxBudget) * 100, 100) : 0,
     };
   }, [campaigns]);
+
+  const tableActiveCount = campaigns.filter((campaign) => campaign.status === "live" || campaign.status === "attention").length;
+  const filteredTableCampaigns = tableStatusFilter === "active"
+    ? campaigns.filter((campaign) => campaign.status === "live" || campaign.status === "attention")
+    : campaigns;
 
   useEffect(() => {
     let cancelled = false;
@@ -1012,30 +1060,78 @@ export default function Home() {
     setSelectedId(campaign.id);
   }
 
-  async function persistSelected(fields: Record<string, unknown>) {
-    if (!selected || Object.keys(fields).length === 0) return;
+  function patchCampaign(campaignId: string, update: Partial<Campaign>) {
+    setCampaigns((current) => current.map((campaign) => (campaign.id === campaignId ? { ...campaign, ...update } : campaign)));
+  }
+
+  async function persistCampaign(campaignId: string, fields: Record<string, unknown>) {
+    if (Object.keys(fields).length === 0) return;
     try {
-      const response = await fetch(`/api/campaigns/${selected.id}`, {
+      const response = await fetch(`/api/campaigns/${campaignId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fields),
       });
-      const payload = await response.json() as { campaign?: CampaignRow; error?: string };
+      const payload = await response.json() as { campaign?: CampaignRow; dailyBudgetCappedByPortfolioLimit?: boolean; error?: string };
       if (!response.ok || !payload.campaign) throw new Error(payload.error || "Wijziging kon niet worden opgeslagen.");
+      if ("campaignDurationDays" in fields) {
+        // Meta may have gotten a smaller daily budget than requested (capped
+        // by the portfolio-wide limit) -- re-sync so the field shows what's
+        // actually running, not what was typed.
+        const updated = rowToCampaign(payload.campaign);
+        patchCampaign(campaignId, { campaignDurationDays: updated.campaignDurationDays });
+        if (payload.dailyBudgetCappedByPortfolioLimit) {
+          toast.warning("Dagbudget deels toegepast", { description: "Het maximale portfolio-dagbudget liet niet de volledige verhoging toe." });
+        }
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Wijziging kon niet worden opgeslagen.");
+      throw error;
     }
+  }
+
+  async function persistSelected(fields: Record<string, unknown>) {
+    if (!selected) return;
+    await persistCampaign(selected.id, fields).catch(() => {});
   }
 
   function patchSelected(update: Partial<Campaign>) {
     if (!selected) return;
-    setCampaigns((current) => current.map((campaign) => campaign.id === selected.id ? { ...campaign, ...update } : campaign));
+    patchCampaign(selected.id, update);
   }
 
   function updateSelected(update: Partial<Campaign>, message: string) {
     patchSelected(update);
     toast.success(message);
     void persistSelected(toApiFields(update));
+  }
+
+  function startEditingBudget(campaign: Campaign, event: React.MouseEvent) {
+    event.stopPropagation();
+    const currentDailyCents = deriveDailyBudgetCents(Math.round(campaign.maxBudget * 100), campaign.campaignDurationDays);
+    setBudgetDraft(String(Math.round(currentDailyCents / 100)));
+    setEditingBudgetId(campaign.id);
+  }
+
+  async function saveInlineBudget(campaign: Campaign) {
+    const amount = Number(budgetDraft.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Vul een geldig dagbudget in.");
+      return;
+    }
+    const dailyBudgetCents = Math.round(amount * 100);
+    const newDuration = Math.max(1, Math.round((campaign.maxBudget * 100) / dailyBudgetCents));
+    setIsSavingBudget(true);
+    patchCampaign(campaign.id, { campaignDurationDays: newDuration });
+    try {
+      await persistCampaign(campaign.id, { campaignDurationDays: newDuration });
+      toast.success(metaStatus.mode === "connected" ? "Dagbudget bijgewerkt in Meta" : "Dagbudget bijgewerkt");
+      setEditingBudgetId(null);
+    } catch {
+      // Error already toasted by persistCampaign.
+    } finally {
+      setIsSavingBudget(false);
+    }
   }
 
   async function deleteSelected() {
@@ -1300,15 +1396,24 @@ export default function Home() {
               <article className="panel overflow-hidden">
                 <div className="panel-header">
                   <div><div className="eyebrow"><Activity className="size-3.5" />Live overzicht</div><h2>Campagnes</h2></div>
-                  <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#0d2b45] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek campagne" /></div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <div className="format-switch">
+                      <button className={tableStatusFilter === "active" ? "active" : ""} onClick={() => setTableStatusFilter("active")}>Actief<span>{tableActiveCount}</span></button>
+                      <button className={tableStatusFilter === "all" ? "active" : ""} onClick={() => setTableStatusFilter("all")}>Alle<span>{campaigns.length}</span></button>
+                    </div>
+                    <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#0d2b45] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek campagne" /></div>
+                  </div>
                 </div>
                 <Table>
                   <TableHeader><TableRow className="border-white/8 hover:bg-transparent">
                     <TableHead className="px-5 table-heading">Vacature</TableHead><TableHead className="table-heading">Status</TableHead><TableHead className="table-heading">Uitgegeven</TableHead><TableHead className="table-heading">Leads</TableHead><TableHead className="table-heading">Kosten/lead</TableHead><TableHead className="pr-5 text-right table-heading">Budget</TableHead>
                   </TableRow></TableHeader>
-                  <TableBody>{campaigns.map((campaign) => {
+                  <TableBody>{filteredTableCampaigns.length === 0 ? (
+                    <TableRow className="border-white/8 hover:bg-transparent"><TableCell colSpan={6} className="px-5 py-10 text-center text-sm text-[#7f97a8]">Geen actieve campagnes.</TableCell></TableRow>
+                  ) : filteredTableCampaigns.map((campaign) => {
                     const rowCpl = campaign.leads ? campaign.spend / campaign.leads : 0;
                     const used = campaign.maxBudget ? Math.round((campaign.spend / campaign.maxBudget) * 100) : 0;
+                    const canEditBudget = campaign.status === "live" || campaign.status === "attention";
                     return (
                       <TableRow key={campaign.id} className={"cursor-pointer border-white/8 hover:bg-[#14405c] " + (campaign.id === selected.id ? "bg-[#133d58]" : "")} onClick={() => setSelectedId(campaign.id)}>
                         <TableCell className="px-5 py-4"><div className="font-semibold text-white">{campaign.title}</div><div className="mt-1 text-xs text-[#6f8798]">{campaign.location}</div></TableCell>
@@ -1316,7 +1421,35 @@ export default function Home() {
                         <TableCell className="font-medium text-[#c4d1d9]">{euro.format(campaign.spend)}</TableCell>
                         <TableCell className="font-medium text-[#c4d1d9]">{campaign.leads}</TableCell>
                         <TableCell className="font-medium text-white">{rowCpl ? euro.format(rowCpl) : "—"}</TableCell>
-                        <TableCell className="pr-5"><div className="ml-auto w-24"><div className="mb-1.5 flex justify-between text-[11px] text-[#6f8798]"><span>{used}%</span><span>{euro.format(campaign.maxBudget)}</span></div><Progress value={Math.min(used, 100)} className="h-1.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-[#1987ad]" /></div></TableCell>
+                        <TableCell className="pr-5">
+                          <div className="ml-auto w-28">
+                            <div className="mb-1.5 flex justify-between text-[11px] text-[#6f8798]"><span>{used}%</span><span>{euro.format(campaign.maxBudget)}</span></div>
+                            <Progress value={Math.min(used, 100)} className="h-1.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-[#1987ad]" />
+                            {canEditBudget && (
+                              editingBudgetId === campaign.id ? (
+                                <div className="mt-1.5 flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                                  <span className="text-[11px] text-[#6f8798]">€</span>
+                                  <input
+                                    autoFocus
+                                    className="w-14 rounded-md border border-[#2f9fc4] bg-[#0d2d45] px-1.5 py-0.5 text-xs text-white outline-none"
+                                    inputMode="numeric"
+                                    value={budgetDraft}
+                                    onChange={(event) => setBudgetDraft(event.target.value)}
+                                    onKeyDown={(event) => event.key === "Enter" && void saveInlineBudget(campaign)}
+                                  />
+                                  <button className="text-[#5bc0df]" onClick={() => void saveInlineBudget(campaign)} disabled={isSavingBudget}>
+                                    {isSavingBudget ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                                  </button>
+                                  <button className="text-[#6f8798]" onClick={() => setEditingBudgetId(null)}>×</button>
+                                </div>
+                              ) : (
+                                <button className="mt-1.5 flex w-full items-center justify-end gap-1 text-[11px] text-[#5bc0df] hover:underline" onClick={(event) => startEditingBudget(campaign, event)}>
+                                  <Pencil className="size-3" />Dagbudget {euro.format(deriveDailyBudgetCents(Math.round(campaign.maxBudget * 100), campaign.campaignDurationDays) / 100)}
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}</TableBody>
@@ -1400,11 +1533,9 @@ export default function Home() {
                       ) : !leadForm ? (
                         <p className="px-5 pb-5 text-sm text-[#7f97a8]">Nog geen leadformulier gevonden voor deze campagne.</p>
                       ) : (
-                        <div className="space-y-2 px-5 pb-5">
-                          {leadForm.questions.map((question, index) => (
-                            <div className="content-box" key={index}>{question.type === "CUSTOM" ? question.label : STANDARD_QUESTION_LABEL[question.type] ?? question.type}</div>
-                          ))}
-                          <p className="pt-1 text-xs leading-5 text-[#607b8d]">Meta laat een eenmaal aangemaakt formulier niet meer bewerken — alleen archiveren. &quot;Nieuw leadformulier&quot; maakt een nieuw formulier aan; die moet je daarna zelf aan een (nieuwe) advertentie koppelen in Meta Ads Manager.</p>
+                        <div className="px-5 pb-5">
+                          <LeadFormPreview form={leadForm} />
+                          <p className="mx-auto mt-4 max-w-[280px] text-center text-xs leading-5 text-[#607b8d]">Zo ziet een sollicitant dit formulier. Meta laat een eenmaal aangemaakt formulier niet meer bewerken — &quot;Nieuw leadformulier&quot; maakt een nieuw formulier aan, dat je daarna zelf aan een (nieuwe) advertentie koppelt in Meta Ads Manager.</p>
                         </div>
                       )}
                     </div>
