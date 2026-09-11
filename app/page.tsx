@@ -200,6 +200,7 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
   const [connected, setConnected] = useState(false);
   const [campaigns, setCampaigns] = useState<AdManagerCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active">("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -227,6 +228,8 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
     if (b.effectiveStatus === "ACTIVE" && a.effectiveStatus !== "ACTIVE") return 1;
     return b.spend - a.spend;
   });
+  const activeCount = sorted.filter((campaign) => campaign.effectiveStatus === "ACTIVE").length;
+  const filtered = statusFilter === "active" ? sorted.filter((campaign) => campaign.effectiveStatus === "ACTIVE") : sorted;
 
   return (
     <article className="panel overflow-hidden">
@@ -236,6 +239,12 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
           <h2>Campagnes in Ads Manager</h2>
           <p className="mt-1 text-xs text-[#607b8d]">Alles wat er in het hele advertentieaccount staat, óók wat niet via dit platform is gemaakt of wordt beheerd.</p>
         </div>
+        {connected && sorted.length > 0 && (
+          <div className="format-switch shrink-0">
+            <button className={statusFilter === "all" ? "active" : ""} onClick={() => setStatusFilter("all")}>Alle<span>{sorted.length}</span></button>
+            <button className={statusFilter === "active" ? "active" : ""} onClick={() => setStatusFilter("active")}>Actief<span>{activeCount}</span></button>
+          </div>
+        )}
       </div>
       {!connected ? (
         <p className="px-5 py-10 text-sm text-[#7f97a8]">Beschikbaar zodra Meta gekoppeld is.</p>
@@ -243,9 +252,11 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
         <div className="flex items-center justify-center py-16 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
       ) : sorted.length === 0 ? (
         <p className="px-5 py-10 text-sm text-[#7f97a8]">Geen campagnes gevonden in dit advertentieaccount.</p>
+      ) : filtered.length === 0 ? (
+        <p className="px-5 py-10 text-sm text-[#7f97a8]">Geen actieve campagnes.</p>
       ) : (
         <div className="max-h-[26rem] divide-y divide-white/8 overflow-y-auto scrollbar-thin">
-          {sorted.map((campaign) => {
+          {filtered.map((campaign) => {
             const stoplicht = AD_MANAGER_STATUS[campaign.effectiveStatus] ?? { label: campaign.effectiveStatus, statusClass: "status-attention" };
             return (
               <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={campaign.id}>
