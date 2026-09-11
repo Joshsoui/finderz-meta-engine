@@ -547,6 +547,7 @@ function IndeedSpendCard({ onSpendSaved }: { onSpendSaved?: () => void }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active">("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -569,7 +570,9 @@ function IndeedSpendCard({ onSpendSaved }: { onSpendSaved?: () => void }) {
     };
   }, []);
 
-  const totals = campaigns.reduce(
+  const activeCount = campaigns.filter((campaign) => campaign.status === "active").length;
+  const filtered = statusFilter === "active" ? campaigns.filter((campaign) => campaign.status === "active") : campaigns;
+  const totals = filtered.reduce(
     (acc, campaign) => ({
       today: acc.today + campaign.todaySpendCents,
       week: acc.week + campaign.weekSpendCents,
@@ -662,7 +665,15 @@ function IndeedSpendCard({ onSpendSaved }: { onSpendSaved?: () => void }) {
           <h2>Indeed-campagnes</h2>
           <p className="mt-1 text-xs text-[#607b8d]">Geen automatische koppeling (vraagt een partnertraject bij Indeed) — vul per campagne handmatig in, dan telt het mee in het totaal bovenaan.</p>
         </div>
-        <button className="secondary-button" onClick={() => setIsAdding((value) => !value)}><Plus className="size-4" />Campagne</button>
+        <div className="flex shrink-0 items-center gap-3">
+          {campaigns.length > 0 && (
+            <div className="format-switch">
+              <button className={statusFilter === "all" ? "active" : ""} onClick={() => setStatusFilter("all")}>Alle<span>{campaigns.length}</span></button>
+              <button className={statusFilter === "active" ? "active" : ""} onClick={() => setStatusFilter("active")}>Actief<span>{activeCount}</span></button>
+            </div>
+          )}
+          <button className="secondary-button" onClick={() => setIsAdding((value) => !value)}><Plus className="size-4" />Campagne</button>
+        </div>
       </div>
       {isAdding && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/8 px-5 py-4">
@@ -682,15 +693,17 @@ function IndeedSpendCard({ onSpendSaved }: { onSpendSaved?: () => void }) {
         <div className="flex items-center justify-center py-16 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
       ) : campaigns.length === 0 ? (
         <div className="px-5 py-10 text-sm text-[#7f97a8]">Nog geen Indeed-campagnes toegevoegd.</div>
+      ) : filtered.length === 0 ? (
+        <div className="px-5 py-10 text-sm text-[#7f97a8]">Geen actieve Indeed-campagnes.</div>
       ) : (
         <>
           <div className="grid grid-cols-3 gap-4 border-b border-white/8 px-5 py-4 text-sm">
-            <div><span className="block text-xs text-[#607b8d]">Vandaag · alle Indeed-campagnes</span><strong className="text-lg text-white">{euro.format(totals.today / 100)}</strong></div>
+            <div><span className="block text-xs text-[#607b8d]">Vandaag · {statusFilter === "active" ? "actieve" : "alle"} Indeed-campagnes</span><strong className="text-lg text-white">{euro.format(totals.today / 100)}</strong></div>
             <div><span className="block text-xs text-[#607b8d]">Laatste 7 dagen</span><strong className="text-lg text-white">{euro.format(totals.week / 100)}</strong></div>
             <div><span className="block text-xs text-[#607b8d]">Totaal sinds bijhouden</span><strong className="text-lg text-white">{euro.format(totals.total / 100)}</strong></div>
           </div>
           <div className="divide-y divide-white/8">
-            {campaigns.map((campaign) => (
+            {filtered.map((campaign) => (
               <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4" key={campaign.id}>
                 <div className="flex min-w-0 items-center gap-3">
                   <span className={"status " + (campaign.status === "active" ? "status-good" : "status-draft")}><span />{campaign.status === "active" ? "Actief" : "Gepauzeerd"}</span>
