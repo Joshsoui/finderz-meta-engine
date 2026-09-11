@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, BarChart3, BrainCircuit,
   CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
-  Megaphone, MousePointerClick, Pause, Pencil, Play, Plus,
+  ListChecks, Megaphone, MousePointerClick, Pause, Pencil, Play, Plus,
   RefreshCw, Search, ShieldCheck, Sparkles, Target, Trash2, Upload,
   TrendingUp, Users, Zap, LoaderCircle,
 } from "lucide-react";
@@ -404,6 +404,101 @@ function MarketingSpendCard({ isMetaAutomatic, platformTotalSpend, onSpendSaved 
         {isMetaAutomatic ? "Meta wordt elke 15 minuten automatisch bijgewerkt." : "Vul dagelijks in wat je in Meta Ads Manager ziet."} Waarvan via dit platform beheerd (totaal): {euro.format(platformTotalSpend)}.
       </p>
     </section>
+  );
+}
+
+type DailyCampaignSpend = { id: string; name: string; channel: "meta" | "indeed"; todaySpendCents: number };
+
+/**
+ * Per-campaign version of the total on MarketingSpendCard -- which campaign
+ * is spending what today, split by channel. Meta figures cover the whole ad
+ * account (not just campaigns managed via this platform), read straight from
+ * Meta's own per-campaign insights; Indeed figures come from the same
+ * hand-entered (now auto-carried-forward) numbers shown on the Indeed card.
+ */
+function TodaySpendByCampaignCard() {
+  const [rows, setRows] = useState<DailyCampaignSpend[]>([]);
+  const [metaConnected, setMetaConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [metaResponse, indeedResponse] = await Promise.all([
+          fetch("/api/meta/all-campaigns?preset=today"),
+          fetch("/api/indeed-campaigns"),
+        ]);
+        const metaPayload = await metaResponse.json() as { connected?: boolean; campaigns?: Array<{ id: string; name: string; spend: number }> };
+        const indeedPayload = await indeedResponse.json() as { campaigns?: Array<{ id: string; title: string; todaySpendCents: number }> };
+        if (cancelled) return;
+        setMetaConnected(Boolean(metaPayload.connected));
+        const metaRows: DailyCampaignSpend[] = (metaPayload.campaigns ?? [])
+          .filter((campaign) => campaign.spend > 0)
+          .map((campaign) => ({ id: `meta-${campaign.id}`, name: campaign.name, channel: "meta", todaySpendCents: Math.round(campaign.spend * 100) }));
+        const indeedRows: DailyCampaignSpend[] = (indeedPayload.campaigns ?? [])
+          .filter((campaign) => campaign.todaySpendCents > 0)
+          .map((campaign) => ({ id: `indeed-${campaign.id}`, name: campaign.title, channel: "indeed", todaySpendCents: campaign.todaySpendCents }));
+        setRows([...metaRows, ...indeedRows]);
+      } catch {
+        // The dashboard still works without this card; fail quietly.
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const metaRows = rows.filter((row) => row.channel === "meta").sort((a, b) => b.todaySpendCents - a.todaySpendCents);
+  const indeedRows = rows.filter((row) => row.channel === "indeed").sort((a, b) => b.todaySpendCents - a.todaySpendCents);
+  const totalCents = rows.reduce((sum, row) => sum + row.todaySpendCents, 0);
+
+  return (
+    <article className="panel overflow-hidden">
+      <div className="panel-header">
+        <div>
+          <div className="eyebrow"><ListChecks className="size-3.5" />Vandaag per campagne</div>
+          <h2>Waar gaat het budget vandaag naartoe</h2>
+        </div>
+        <div className="text-right"><span className="block text-xs text-[#607b8d]">Totaal vandaag</span><strong className="text-lg font-semibold text-white">{euro.format(totalCents / 100)}</strong></div>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
+      ) : rows.length === 0 ? (
+        <p className="px-5 py-10 text-sm text-[#7f97a8]">{metaConnected ? "Nog geen besteding vandaag." : "Beschikbaar zodra Meta gekoppeld is."}</p>
+      ) : (
+        <div className="divide-y divide-white/8">
+          {metaRows.length > 0 && (
+            <div className="px-5 py-4">
+              <span className="table-heading">Meta</span>
+              <div className="mt-2.5 space-y-2">
+                {metaRows.map((row) => (
+                  <div className="flex items-center justify-between gap-3 text-sm" key={row.id}>
+                    <span className="truncate text-[#c4d1d9]">{row.name}</span>
+                    <strong className="shrink-0 text-white">{euro.format(row.todaySpendCents / 100)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {indeedRows.length > 0 && (
+            <div className="px-5 py-4">
+              <span className="table-heading">Indeed</span>
+              <div className="mt-2.5 space-y-2">
+                {indeedRows.map((row) => (
+                  <div className="flex items-center justify-between gap-3 text-sm" key={row.id}>
+                    <span className="truncate text-[#c4d1d9]">{row.name}</span>
+                    <strong className="shrink-0 text-white">{euro.format(row.todaySpendCents / 100)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -1061,6 +1156,8 @@ export default function Home() {
           <ImportCampaignSheet candidate={importCandidate} onClose={() => setImportCandidate(null)} onImported={addCampaign} />
 
           <MarketingSpendCard key={spendVersion} isMetaAutomatic={metaStatus.mode === "connected"} platformTotalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
+
+          <TodaySpendByCampaignCard key={"breakdown-" + spendVersion} />
 
           <AdManagerCampaignsCard importedIds={importedMetaCampaignIds} onImport={setImportCandidate} />
 

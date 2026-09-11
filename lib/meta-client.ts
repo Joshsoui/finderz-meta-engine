@@ -319,7 +319,7 @@ export type MetaAccountCampaign = {
  * spend/leads in the same request as the campaign list, rather than one
  * extra call per campaign.
  */
-export async function fetchAllAccountCampaigns(): Promise<MetaAccountCampaign[]> {
+export async function fetchAllAccountCampaigns(datePreset: "today" | "maximum" = "maximum"): Promise<MetaAccountCampaign[]> {
   const credentials = getMetaCredentials();
   if (!credentials) throw new Error("Meta is not configured");
 
@@ -334,7 +334,7 @@ export async function fetchAllAccountCampaigns(): Promise<MetaAccountCampaign[]>
       insights?: { data?: Array<{ spend?: string; actions?: Array<{ action_type: string; value: string }> }> };
     }>;
   }>(`/act_${credentials.adAccountId}/campaigns`, credentials.accessToken, {
-    params: { fields: "name,status,effective_status,daily_budget,lifetime_budget,insights.date_preset(maximum){spend,actions}", limit: 200 },
+    params: { fields: `name,status,effective_status,daily_budget,lifetime_budget,insights.date_preset(${datePreset}){spend,actions}`, limit: 200 },
   });
 
   return (result.data ?? []).map((campaign) => {
