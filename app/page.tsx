@@ -18,9 +18,6 @@ import { PortfolioBudgetCard } from "@/components/portfolio-budget-card";
 import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
 import { Progress } from "@/components/ui/progress";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -177,6 +174,54 @@ function getAdPerformanceInfo(ad: CampaignAd, activeAds: CampaignAd[]): AdPerfor
     ...AD_PERFORMANCE_STYLE.poor,
     reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% hoger dan de best presterende advertentie in deze campagne (${euro.format(bestCpl)}).`,
     recommendation: `Advies: pauzeer deze advertentie${lowConfidence ? " (maar wacht dit desgewenst nog even af, zie hieronder)" : ""}. Het budget gaat dan automatisch naar de beter presterende advertentie(s).${confidenceNote}`,
+  };
+}
+
+/**
+ * Same stoplight idea as getAdPerformanceInfo, but one level up: how a whole
+ * campaign's cost/lead compares to its own target CPL, so the "moet ik iets
+ * doen" signal is visible on the campaign list itself, not only after
+ * clicking in and scrolling to the ad breakdown.
+ */
+function getCampaignPerformanceInfo(campaign: Campaign): AdPerformanceInfo | null {
+  if (campaign.status !== "live" && campaign.status !== "attention") return null;
+  if (!campaign.targetCpl || campaign.targetCpl <= 0) return null;
+  const lowConfidence = campaign.leads < AD_PERFORMANCE_CONFIDENT_LEADS;
+  const confidenceNote = lowConfidence ? ` Nog maar ${campaign.leads} lead${campaign.leads === 1 ? "" : "s"} binnen voor deze campagne -- neem dit nog niet als zekerheid.` : "";
+
+  if (campaign.leads === 0) {
+    if (campaign.spend <= campaign.targetCpl * 2) return null;
+    return {
+      tier: "poor",
+      ...AD_PERFORMANCE_STYLE.poor,
+      reason: `Al ${euro.format(campaign.spend)} uitgegeven zonder een lead, terwijl het doel ${euro.format(campaign.targetCpl)} per lead is.`,
+      recommendation: "Advies: bekijk de advertenties van deze campagne en pauzeer wat niet werkt, of pas het leadform of de targeting aan.",
+    };
+  }
+
+  const cpl = campaign.spend / campaign.leads;
+  const diffPercent = Math.round(((cpl - campaign.targetCpl) / campaign.targetCpl) * 100);
+  if (cpl <= campaign.targetCpl * 1.1) {
+    return {
+      tier: "good",
+      ...AD_PERFORMANCE_STYLE.good,
+      reason: `Kosten per lead (${euro.format(cpl)}) zitten op of onder het doel van ${euro.format(campaign.targetCpl)}.`,
+      recommendation: "Geen actie nodig.",
+    };
+  }
+  if (cpl <= campaign.targetCpl * 1.5) {
+    return {
+      tier: "warning",
+      ...AD_PERFORMANCE_STYLE.warning,
+      reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% boven het doel van ${euro.format(campaign.targetCpl)}.`,
+      recommendation: `Advies: nog niet ingrijpen, wel in de gaten houden. Bekijk in deze campagne welke advertentie de kosten omhoog haalt.${confidenceNote}`,
+    };
+  }
+  return {
+    tier: "poor",
+    ...AD_PERFORMANCE_STYLE.poor,
+    reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% boven het doel van ${euro.format(campaign.targetCpl)}.`,
+    recommendation: `Advies: bekijk in deze campagne welke advertentie(s) dit veroorzaken en pauzeer die. Helpt dat niet, overweeg dan de targeting of het leadform aan te passen.${confidenceNote}`,
   };
 }
 
@@ -1125,16 +1170,9 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      if (!selected) {
-        if (!cancelled) {
-          setCampaignAds([]);
-          setCampaignAdsConnected(false);
-        }
-        return;
-      }
+    async function fetchAds(campaignId: string) {
       try {
-        const response = await fetch(`/api/campaigns/${selected.id}/ads`);
+        const response = await fetch(`/api/campaigns/${campaignId}/ads`);
         const payload = await response.json() as { ads?: CampaignAd[]; connected?: boolean; error?: string };
         if (response.ok && !cancelled) {
           setCampaignAds(payload.ads ?? []);
@@ -1143,9 +1181,23 @@ export default function Home() {
       } catch {
         // The performance tab still works without an ad breakdown; fail quietly.
       }
+    }
+    (async () => {
+      if (!selected) {
+        if (!cancelled) {
+          setCampaignAds([]);
+          setCampaignAdsConnected(false);
+        }
+        return;
+      }
+      await fetchAds(selected.id);
     })();
+    // Refresh while this campaign is being viewed, since the stoplight/pause
+    // decision it drives is only useful if the numbers are current.
+    const interval = selected ? setInterval(() => void fetchAds(selected.id), 60_000) : undefined;
     return () => {
       cancelled = true;
+      if (interval) clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
@@ -1524,56 +1576,78 @@ export default function Home() {
                     <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#0d2b45] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek campagne" /></div>
                   </div>
                 </div>
-                <Table>
-                  <TableHeader><TableRow className="border-white/8 hover:bg-transparent">
-                    <TableHead className="px-5 table-heading">Vacature</TableHead><TableHead className="table-heading">Status</TableHead><TableHead className="table-heading">Uitgegeven</TableHead><TableHead className="table-heading">Leads</TableHead><TableHead className="table-heading">Kosten/lead</TableHead><TableHead className="pr-5 text-right table-heading">Budget</TableHead>
-                  </TableRow></TableHeader>
-                  <TableBody>{filteredTableCampaigns.length === 0 ? (
-                    <TableRow className="border-white/8 hover:bg-transparent"><TableCell colSpan={6} className="px-5 py-10 text-center text-sm text-[#7f97a8]">Geen actieve campagnes.</TableCell></TableRow>
-                  ) : filteredTableCampaigns.map((campaign) => {
-                    const rowCpl = campaign.leads ? campaign.spend / campaign.leads : 0;
-                    const used = campaign.maxBudget ? Math.round((campaign.spend / campaign.maxBudget) * 100) : 0;
-                    const canEditBudget = campaign.status === "live" || campaign.status === "attention";
-                    return (
-                      <TableRow key={campaign.id} className={"cursor-pointer border-white/8 hover:bg-[#14405c] " + (campaign.id === selected.id ? "bg-[#133d58]" : "")} onClick={() => setSelectedId(campaign.id)}>
-                        <TableCell className="px-5 py-4"><div className="font-semibold text-white">{campaign.title}</div><div className="mt-1 text-xs text-[#6f8798]">{campaign.location}</div></TableCell>
-                        <TableCell><span className={"status status-" + campaign.status}><span />{statusLabel(campaign.status)}</span></TableCell>
-                        <TableCell className="font-medium text-[#c4d1d9]">{euro.format(campaign.spend)}</TableCell>
-                        <TableCell className="font-medium text-[#c4d1d9]">{campaign.leads}</TableCell>
-                        <TableCell className="font-medium text-white">{rowCpl ? euro.format(rowCpl) : "—"}</TableCell>
-                        <TableCell className="pr-5">
-                          <div className="ml-auto w-28">
-                            <div className="mb-1.5 flex justify-between text-[11px] text-[#6f8798]"><span>{used}%</span><span>{euro.format(campaign.maxBudget)}</span></div>
-                            <Progress value={Math.min(used, 100)} className="h-1.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-[#1987ad]" />
-                            {canEditBudget && (
-                              editingBudgetId === campaign.id ? (
-                                <div className="mt-1.5 flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
-                                  <span className="text-[11px] text-[#6f8798]">€</span>
-                                  <input
-                                    autoFocus
-                                    className="w-14 rounded-md border border-[#2f9fc4] bg-[#0d2d45] px-1.5 py-0.5 text-xs text-white outline-none"
-                                    inputMode="numeric"
-                                    value={budgetDraft}
-                                    onChange={(event) => setBudgetDraft(event.target.value)}
-                                    onKeyDown={(event) => event.key === "Enter" && void saveInlineBudget(campaign)}
-                                  />
-                                  <button className="text-[#5bc0df]" onClick={() => void saveInlineBudget(campaign)} disabled={isSavingBudget}>
-                                    {isSavingBudget ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
-                                  </button>
-                                  <button className="text-[#6f8798]" onClick={() => setEditingBudgetId(null)}>×</button>
-                                </div>
-                              ) : (
-                                <button className="mt-1.5 flex w-full items-center justify-end gap-1 text-[11px] text-[#5bc0df] hover:underline" onClick={(event) => startEditingBudget(campaign, event)}>
-                                  <Pencil className="size-3" />Dagbudget {euro.format(deriveDailyBudgetCents(Math.round(campaign.maxBudget * 100), campaign.campaignDurationDays) / 100)}
-                                </button>
-                              )
-                            )}
+                {filteredTableCampaigns.length === 0 ? (
+                  <p className="px-5 py-10 text-center text-sm text-[#7f97a8]">Geen actieve campagnes.</p>
+                ) : (
+                  <div className="divide-y divide-white/8">
+                    {filteredTableCampaigns.map((campaign) => {
+                      const rowCpl = campaign.leads ? campaign.spend / campaign.leads : 0;
+                      const used = campaign.maxBudget ? Math.round((campaign.spend / campaign.maxBudget) * 100) : 0;
+                      const canEditBudget = campaign.status === "live" || campaign.status === "attention";
+                      const performance = getCampaignPerformanceInfo(campaign);
+                      return (
+                        <div
+                          key={campaign.id}
+                          className={"flex flex-wrap items-center justify-between gap-4 px-5 py-3.5 cursor-pointer " + (campaign.id === selected.id ? "bg-[#133d58]" : "hover:bg-[#14405c]")}
+                          onClick={() => setSelectedId(campaign.id)}
+                        >
+                          <div className="min-w-0 max-w-full flex-1 basis-56">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={"status status-" + campaign.status}><span />{statusLabel(campaign.status)}</span>
+                              {performance && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex cursor-default items-center gap-1.5 text-xs font-semibold text-[#91aabb] underline decoration-dotted decoration-[#4a6478] underline-offset-2">
+                                      <span className={"size-2 shrink-0 rounded-full " + performance.dotClass} />{performance.label}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-72">
+                                    <p>{performance.reason}</p>
+                                    <p className="mt-1.5 font-semibold">{performance.recommendation}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                            <div className="mt-1 truncate font-semibold text-white">{campaign.title}</div>
+                            <div className="text-xs text-[#6f8798]">{campaign.location}</div>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}</TableBody>
-                </Table>
+                          <div className="flex shrink-0 flex-wrap items-center gap-5 text-right text-sm">
+                            <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="font-medium text-[#c4d1d9]">{euro.format(campaign.spend)}</strong></div>
+                            <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="font-medium text-[#c4d1d9]">{campaign.leads}</strong></div>
+                            <div><span className="block text-xs text-[#607b8d]">Kosten/lead</span><strong className="font-medium text-white">{rowCpl ? euro.format(rowCpl) : "—"}</strong></div>
+                            <div className="w-28">
+                              <div className="mb-1.5 flex justify-between text-[11px] text-[#6f8798]"><span>{used}%</span><span>{euro.format(campaign.maxBudget)}</span></div>
+                              <Progress value={Math.min(used, 100)} className="h-1.5 bg-white/8 [&_[data-slot=progress-indicator]]:bg-[#1987ad]" />
+                              {canEditBudget && (
+                                editingBudgetId === campaign.id ? (
+                                  <div className="mt-1.5 flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                                    <span className="text-[11px] text-[#6f8798]">€</span>
+                                    <input
+                                      autoFocus
+                                      className="w-14 rounded-md border border-[#2f9fc4] bg-[#0d2d45] px-1.5 py-0.5 text-xs text-white outline-none"
+                                      inputMode="numeric"
+                                      value={budgetDraft}
+                                      onChange={(event) => setBudgetDraft(event.target.value)}
+                                      onKeyDown={(event) => event.key === "Enter" && void saveInlineBudget(campaign)}
+                                    />
+                                    <button className="text-[#5bc0df]" onClick={() => void saveInlineBudget(campaign)} disabled={isSavingBudget}>
+                                      {isSavingBudget ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                                    </button>
+                                    <button className="text-[#6f8798]" onClick={() => setEditingBudgetId(null)}>×</button>
+                                  </div>
+                                ) : (
+                                  <button className="mt-1.5 flex w-full items-center justify-end gap-1 text-[11px] text-[#5bc0df] hover:underline" onClick={(event) => startEditingBudget(campaign, event)}>
+                                    <Pencil className="size-3" />Dagbudget {euro.format(deriveDailyBudgetCents(Math.round(campaign.maxBudget * 100), campaign.campaignDurationDays) / 100)}
+                                  </button>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </article>
 
               <article className="panel">
