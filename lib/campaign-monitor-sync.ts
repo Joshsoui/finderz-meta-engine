@@ -4,6 +4,7 @@ import { campaigns, leads, metaSyncHealth, metricSnapshots, optimizationActions 
 import { syncAccountSpendSummary } from "@/lib/account-spend-sync";
 import { evaluateCampaign } from "@/lib/campaign-engine";
 import { syncAutomaticDailySpend } from "@/lib/daily-spend-sync";
+import { syncIndeedDailyCarryForward } from "@/lib/indeed-spend-sync";
 import { fetchAdStatus, fetchCampaignInsights, fetchLeadFormIdForCampaign, fetchNewLeads, getMetaCredentials, setMetaCampaignStatus } from "@/lib/meta-client";
 
 async function recordMetaSyncResult(db: Awaited<ReturnType<typeof getDb>>, error?: unknown) {
@@ -243,6 +244,12 @@ export async function runCampaignMonitor(): Promise<{ evaluated: number; actions
     } catch (error) {
       console.error("Account-wide spend sync failed", error);
     }
+  }
+
+  try {
+    await syncIndeedDailyCarryForward();
+  } catch (error) {
+    console.error("Indeed daily carry-forward failed", error);
   }
 
   return { evaluated: liveCampaigns.length, actionsApplied };
