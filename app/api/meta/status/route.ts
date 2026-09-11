@@ -18,9 +18,11 @@ export async function GET() {
 
     let healthy = true;
     let lastErrorMessage: string | null = null;
+    let lastSuccessAt: string | null = null;
     if (configured) {
       const db = await getDb();
       const [health] = await db.select().from(metaSyncHealth).where(eq(metaSyncHealth.id, "meta")).limit(1);
+      lastSuccessAt = health?.lastSuccessAt ?? null;
       if (health && health.consecutiveFailures >= UNHEALTHY_FAILURE_THRESHOLD) {
         healthy = false;
         lastErrorMessage = health.lastErrorMessage;
@@ -37,6 +39,7 @@ export async function GET() {
       mode: process.env.META_ACCESS_TOKEN ? "connected" : "sandbox",
       healthy,
       lastErrorMessage,
+      lastSuccessAt,
     });
   } catch (error) {
     return errorResponse(error, "Meta status unavailable");

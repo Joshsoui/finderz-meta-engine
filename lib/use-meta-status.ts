@@ -9,6 +9,8 @@ export type MetaStatus = {
   /** False once the monitor has seen several consecutive Meta API failures in a row (expired token, revoked access, ...) -- distinct from "not configured at all". */
   healthy: boolean;
   lastErrorMessage: string | null;
+  /** ISO timestamp of the monitor's last successful Meta sync cycle (runs every 15 min), or null if it has never succeeded yet. */
+  lastSuccessAt: string | null;
 };
 
 const SANDBOX_STATUS: MetaStatus = {
@@ -17,6 +19,7 @@ const SANDBOX_STATUS: MetaStatus = {
   mode: "sandbox",
   healthy: true,
   lastErrorMessage: null,
+  lastSuccessAt: null,
 };
 
 /** Reflects whether a real Meta Ads connection is configured (env vars set), or still sandbox. */

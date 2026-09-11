@@ -73,6 +73,23 @@ const euro = new Intl.NumberFormat("nl-NL", {
   maximumFractionDigits: 0,
 });
 
+const headerDateFormat = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" });
+
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function formatRelativeTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (minutes < 1) return "net";
+  if (minutes < 60) return `${minutes} min geleden`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} uur geleden`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? "dag" : "dagen"} geleden`;
+}
+
 type HistoryPoint = { recordedAt: string; cpl: number | null };
 
 type PlacementBreakdown = { platform: string; position: string; spend: number; impressions: number; clicks: number; leads: number };
@@ -163,192 +180,6 @@ function TrendChart({ history }: { history: HistoryPoint[] }) {
         {labelIndexes.map((index) => <span key={index}>{trendDateFormat.format(new Date(valid[index].recordedAt))}</span>)}
       </div>
     </div>
-  );
-}
-
-type DailySpendEntry = { date: string; amountCents: number };
-
-function formatDayLabel(date: string, today: string) {
-  if (date === today) return "Vandaag";
-  const [year, month, day] = date.split("-").map(Number);
-  return new Intl.DateTimeFormat("nl-NL", { weekday: "short", day: "numeric", month: "short" }).format(new Date(year, month - 1, day));
-}
-
-function DailySpendCard({ isAutomatic, totalSpend, onSpendSaved }: { isAutomatic: boolean; totalSpend: number; onSpendSaved?: () => void }) {
-  const [today, setToday] = useState("");
-  const [entries, setEntries] = useState<DailySpendEntry[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await fetch("/api/daily-spend");
-        const payload = await response.json() as { today?: string; entries?: DailySpendEntry[]; error?: string };
-        if (!response.ok || !payload.today) throw new Error(payload.error || "Dagtotaal kon niet worden geladen.");
-        if (cancelled) return;
-        setToday(payload.today);
-        setEntries(payload.entries ?? []);
-      } catch (error) {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : "Dagtotaal kon niet worden geladen.");
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const todayEntry = entries.find((entry) => entry.date === today);
-  const weekTotal = entries.slice(0, 7).reduce((sum, entry) => sum + entry.amountCents, 0) / 100;
-
-  function startEditing() {
-    setDraft(todayEntry ? String(todayEntry.amountCents / 100).replace(".", ",") : "");
-    setIsEditing(true);
-  }
-
-  async function saveToday() {
-    const amount = Number(draft.replace(",", "."));
-    if (!Number.isFinite(amount) || amount < 0) {
-      toast.error("Vul een geldig bedrag in.");
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const response = await fetch("/api/daily-spend", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: today, amount }),
-      });
-      const payload = await response.json() as { entry?: DailySpendEntry; error?: string };
-      if (!response.ok || !payload.entry) throw new Error(payload.error || "Dagtotaal kon niet worden opgeslagen.");
-      const saved = payload.entry;
-      setEntries((current) => [saved, ...current.filter((entry) => entry.date !== saved.date)].sort((a, b) => b.date.localeCompare(a.date)));
-      setIsEditing(false);
-      toast.success("Dagtotaal bijgewerkt");
-      onSpendSaved?.();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Dagtotaal kon niet worden opgeslagen.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  return (
-    <section className="daily-spend-card daily-spend-card--platform">
-      <div className="daily-spend-main">
-        <span className="scope-badge scope-badge-platform"><CircleDollarSign className="size-3" />Dit platform</span>
-        <p className="daily-spend-subheading">Vandaag besteed</p>
-        {isEditing ? (
-          <div className="daily-spend-edit">
-            <span className="daily-spend-prefix">€</span>
-            <input
-              autoFocus
-              className="daily-spend-input"
-              inputMode="decimal"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && void saveToday()}
-              placeholder="0"
-            />
-            <button className="primary-button" onClick={saveToday} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Opslaan</button>
-            <button className="secondary-button" onClick={() => setIsEditing(false)}>Annuleren</button>
-          </div>
-        ) : (
-          <div className="daily-spend-display">
-            <span className="daily-spend-amount">{isLoading ? "…" : euro.format((todayEntry?.amountCents ?? 0) / 100)}</span>
-            {isAutomatic ? (
-              <span className="live-pulse"><span />Automatisch via Meta</span>
-            ) : (
-              <button className="secondary-button" onClick={startEditing}><Pencil className="size-4" />{todayEntry ? "Bewerken" : "Invullen"}</button>
-            )}
-          </div>
-        )}
-        <p className="daily-spend-hint">
-          Alleen de campagnes die via dit platform worden beheerd. {isAutomatic
-            ? "Wordt elke 15 minuten automatisch bijgewerkt met de echte spend uit Meta -- geen handmatige invoer meer nodig."
-            : "Vul hier dagelijks het totaal in dat je in Meta Ads Manager ziet — dan hoeft dit niet meer los in een sheet."}
-        </p>
-      </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Laatste 7 dagen</span>
-        <strong className="daily-spend-week-total">{euro.format(weekTotal)}</strong>
-        <div className="daily-spend-days">
-          {entries.slice(0, 7).map((entry) => (
-            <div className="daily-spend-day" key={entry.date}>
-              <span>{formatDayLabel(entry.date, today)}</span>
-              <strong>{euro.format(entry.amountCents / 100)}</strong>
-            </div>
-          ))}
-          {!isLoading && entries.length === 0 && <p className="daily-spend-empty">Nog geen dagen ingevuld.</p>}
-        </div>
-      </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Totaal (levensduur)</span>
-        <strong className="daily-spend-week-total">{euro.format(totalSpend)}</strong>
-      </div>
-    </section>
-  );
-}
-
-type AccountSpendSummary = { connected: boolean; today?: number; last7d?: number; lifetime?: number; updatedAt?: string | null };
-
-function AccountSpendCard() {
-  const [summary, setSummary] = useState<AccountSpendSummary>({ connected: false });
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await fetch("/api/meta/account-spend");
-        const payload = await response.json() as AccountSpendSummary & { error?: string };
-        if (response.ok && !cancelled) setSummary(payload);
-      } catch {
-        // The dashboard still works without this card; fail quietly.
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <section className="daily-spend-card daily-spend-card--account">
-      <div className="daily-spend-main">
-        <span className="scope-badge scope-badge-account"><Gauge className="size-3" />Heel Meta-account</span>
-        {!summary.connected ? (
-          <>
-            <p className="daily-spend-subheading">Vandaag besteed</p>
-            <div className="daily-spend-display"><span className="daily-spend-amount">—</span></div>
-            <p className="daily-spend-hint">Beschikbaar zodra Meta gekoppeld is. Dit laat straks het complete accountbeeld zien, óók campagnes die niet via dit platform zijn gemaakt.</p>
-          </>
-        ) : (
-          <>
-            <p className="daily-spend-subheading">Vandaag besteed</p>
-            <div className="daily-spend-display">
-              <span className="daily-spend-amount">{isLoading ? "…" : euro.format(summary.today ?? 0)}</span>
-              <span className="live-pulse"><span />Live uit Meta</span>
-            </div>
-            <p className="daily-spend-hint">Het volledige advertentieaccount — inclusief campagnes die niet via dit platform lopen.</p>
-          </>
-        )}
-      </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Laatste 7 dagen</span>
-        <strong className="daily-spend-week-total">{summary.connected ? euro.format(summary.last7d ?? 0) : "—"}</strong>
-      </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Totaal (levensduur account)</span>
-        <strong className="daily-spend-week-total">{summary.connected ? euro.format(summary.lifetime ?? 0) : "—"}</strong>
-      </div>
-    </section>
   );
 }
 
@@ -459,19 +290,37 @@ type MarketingSpendSummary = {
   lifetime: { meta: number; indeed: number; total: number };
 };
 
-function MarketingTotalCard() {
+/**
+ * Replaces three near-identical "spend" cards (combined total, platform-only,
+ * whole Meta account) that used to sit stacked on the dashboard -- recruiters
+ * kept mixing them up since each showed a similarly-sized number with only
+ * small text telling them apart. One glance now: the combined total is the
+ * only hero number; Meta/Indeed and the 7-day/lifetime figures are secondary
+ * stat tiles; the platform-managed subset (a bookkeeping detail, not
+ * something to act on daily) is a single small footnote line.
+ */
+function MarketingSpendCard({ isMetaAutomatic, platformTotalSpend, onSpendSaved }: { isMetaAutomatic: boolean; platformTotalSpend: number; onSpendSaved?: () => void }) {
   const [summary, setSummary] = useState<MarketingSpendSummary | null>(null);
+  const [today, setToday] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditingMeta, setIsEditingMeta] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch("/api/marketing-spend-summary");
-        const payload = await response.json() as MarketingSpendSummary & { error?: string };
-        if (response.ok && !cancelled) setSummary(payload);
+        const [summaryResponse, spendResponse] = await Promise.all([
+          fetch("/api/marketing-spend-summary"),
+          fetch("/api/daily-spend"),
+        ]);
+        const summaryPayload = await summaryResponse.json() as MarketingSpendSummary & { error?: string };
+        if (summaryResponse.ok && !cancelled) setSummary(summaryPayload);
+        const spendPayload = await spendResponse.json() as { today?: string };
+        if (spendResponse.ok && spendPayload.today && !cancelled) setToday(spendPayload.today);
       } catch {
-        // The individual channel cards below still work without this one.
+        // The dashboard still works without this card; fail quietly.
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -481,25 +330,79 @@ function MarketingTotalCard() {
     };
   }, []);
 
+  function startEditingMeta() {
+    setDraft(summary ? String(summary.today.meta).replace(".", ",") : "");
+    setIsEditingMeta(true);
+  }
+
+  async function saveMetaToday() {
+    const amount = Number(draft.replace(",", "."));
+    if (!Number.isFinite(amount) || amount < 0) {
+      toast.error("Vul een geldig bedrag in.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/daily-spend", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: today, amount }),
+      });
+      if (!response.ok) throw new Error("Dagtotaal kon niet worden opgeslagen.");
+      setIsEditingMeta(false);
+      toast.success("Dagtotaal bijgewerkt");
+      onSpendSaved?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Dagtotaal kon niet worden opgeslagen.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
-    <section className="daily-spend-card daily-spend-card--total">
-      <div className="daily-spend-main">
-        <span className="scope-badge scope-badge-total"><CircleDollarSign className="size-3" />Totaal · Meta + Indeed</span>
-        <div className="daily-spend-display">
-          <span className="daily-spend-amount">{isLoading || !summary ? "…" : euro.format(summary.today.total)}</span>
+    <section className="panel p-5">
+      <div className="eyebrow"><CircleDollarSign className="size-3.5" />Marketingkosten</div>
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <p className="text-xs text-[#7f97a8]">Vandaag besteed · Meta + Indeed</p>
+          <span className="mt-1 block text-4xl font-bold tracking-tight text-white">{isLoading || !summary ? "…" : euro.format(summary.today.total)}</span>
         </div>
-        <p className="daily-spend-hint">
-          Vandaag besteed, over beide kanalen samen. {summary ? `Meta ${euro.format(summary.today.meta)} · Indeed ${euro.format(summary.today.indeed)}.` : ""}
-        </p>
+        <div className="flex gap-6 text-right">
+          <div><span className="block text-xs text-[#6f8798]">Laatste 7 dagen</span><strong className="text-lg font-semibold text-white">{summary ? euro.format(summary.last7d.total) : "—"}</strong></div>
+          <div><span className="block text-xs text-[#6f8798]">Totaal</span><strong className="text-lg font-semibold text-white">{summary ? euro.format(summary.lifetime.total) : "—"}</strong></div>
+        </div>
       </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Laatste 7 dagen</span>
-        <strong className="daily-spend-week-total">{summary ? euro.format(summary.last7d.total) : "—"}</strong>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="budget-stat">
+          <div className="flex items-center justify-between"><span>Meta</span>{isMetaAutomatic && <span className="live-pulse"><span />Live</span>}</div>
+          {isEditingMeta ? (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="daily-spend-prefix text-base">€</span>
+              <input
+                autoFocus
+                className="daily-spend-input !w-20 !py-1 !text-base"
+                inputMode="decimal"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && void saveMetaToday()}
+              />
+              <button className="secondary-button !h-8 !px-2" onClick={saveMetaToday} disabled={isSaving}>{isSaving ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}</button>
+              <button className="secondary-button !h-8 !px-2" onClick={() => setIsEditingMeta(false)}>Stop</button>
+            </div>
+          ) : (
+            <div className="mt-1 flex items-end justify-between gap-2">
+              <strong>{summary ? euro.format(summary.today.meta) : "—"}</strong>
+              {!isMetaAutomatic && <button className="secondary-button !h-8 !px-2 !text-xs" onClick={startEditingMeta}><Pencil className="size-3.5" />Bewerken</button>}
+            </div>
+          )}
+        </div>
+        <div className="budget-stat"><span>Indeed</span><strong>{summary ? euro.format(summary.today.indeed) : "—"}</strong></div>
       </div>
-      <div className="daily-spend-week">
-        <span className="daily-spend-week-label">Totaal</span>
-        <strong className="daily-spend-week-total">{summary ? euro.format(summary.lifetime.total) : "—"}</strong>
-      </div>
+
+      <p className="mt-4 text-xs leading-5 text-[#607b8d]">
+        {isMetaAutomatic ? "Meta wordt elke 15 minuten automatisch bijgewerkt." : "Vul dagelijks in wat je in Meta Ads Manager ziet."} Waarvan via dit platform beheerd (totaal): {euro.format(platformTotalSpend)}.
+      </p>
     </section>
   );
 }
@@ -825,7 +728,7 @@ export default function Home() {
   const [placements, setPlacements] = useState<PlacementBreakdown[]>([]);
   const [placementsConnected, setPlacementsConnected] = useState(false);
   // Bumped whenever Meta or Indeed daily spend is saved, so the combined
-  // MarketingTotalCard (which only fetches once on mount) refetches instead
+  // MarketingSpendCard (which only fetches once on mount) refetches instead
   // of showing a stale total from before that edit.
   const [spendVersion, setSpendVersion] = useState(0);
   const [importCandidate, setImportCandidate] = useState<ImportCandidate | null>(null);
@@ -1149,16 +1052,15 @@ export default function Home() {
     <AppShell
       active="overzicht"
       title="Campagnes"
-      subtitle="Vrijdag 5 september · laatste analyse 2 min geleden"
+      subtitle={
+        capitalize(headerDateFormat.format(new Date()))
+        + (metaStatus.mode === "connected" && metaStatus.lastSuccessAt ? ` · laatste analyse ${formatRelativeTime(metaStatus.lastSuccessAt)}` : "")
+      }
       headerActions={<NewCampaignSheet onCreate={addCampaign} />}
     >
           <ImportCampaignSheet candidate={importCandidate} onClose={() => setImportCandidate(null)} onImported={addCampaign} />
 
-          <MarketingTotalCard key={spendVersion} />
-
-          <DailySpendCard isAutomatic={metaStatus.mode === "connected"} totalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
-
-          <AccountSpendCard />
+          <MarketingSpendCard key={spendVersion} isMetaAutomatic={metaStatus.mode === "connected"} platformTotalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
           <AdManagerCampaignsCard importedIds={importedMetaCampaignIds} onImport={setImportCandidate} />
 
