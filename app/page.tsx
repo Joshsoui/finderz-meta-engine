@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, BarChart3, BrainCircuit,
   CheckCircle2, CircleDollarSign, Clock3, Download, Gauge, ImageIcon,
@@ -225,6 +225,56 @@ function getCampaignPerformanceInfo(campaign: Campaign): AdPerformanceInfo | nul
   };
 }
 
+/**
+ * The stoplight dot + label that opens the performance tooltip. Radix's
+ * Tooltip only opens on hover/focus by default, which never fires on a
+ * touchscreen -- so this also toggles it open/closed on tap, controlling
+ * the open state ourselves rather than relying on Radix's own trigger
+ * heuristics (which are pointer-type dependent and unreliable on mobile).
+ */
+function PerformanceBadge({ performance }: { performance: AdPerformanceInfo }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild>
+        <span
+          ref={triggerRef}
+          className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[#91aabb] underline decoration-dotted decoration-[#4a6478] underline-offset-2"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            // Radix's tooltip only opens on hover/focus, which never fires on
+            // a touchscreen -- so touch taps toggle it ourselves. Leave mouse
+            // pointerdown alone: Radix already handles that via hover, and
+            // its own pointerdown-while-open close would fight our toggle.
+            if (event.pointerType !== "touch") return;
+            event.preventDefault();
+            setOpen((current) => !current);
+          }}
+          onClick={(event) => {
+            // Radix's trigger closes the tooltip on any click as a built-in
+            // safeguard -- on a touchscreen, the tap that just opened it via
+            // onPointerDown above also fires a compatibility click right
+            // after, which would otherwise undo the toggle instantly.
+            event.preventDefault();
+          }}
+        >
+          <span className={"size-2 shrink-0 rounded-full " + performance.dotClass} />{performance.label}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        className="max-w-72"
+        onPointerDownOutside={(event) => {
+          if (triggerRef.current?.contains(event.target as Node)) event.preventDefault();
+        }}
+      >
+        <p>{performance.reason}</p>
+        <p className="mt-1.5 font-semibold">{performance.recommendation}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
   ads: CampaignAd[];
   connected: boolean;
@@ -297,19 +347,7 @@ function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
-                      {performance && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex cursor-default items-center gap-1.5 text-xs font-semibold text-[#91aabb] underline decoration-dotted decoration-[#4a6478] underline-offset-2">
-                              <span className={"size-2 shrink-0 rounded-full " + performance.dotClass} />{performance.label}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-72">
-                            <p>{performance.reason}</p>
-                            <p className="mt-1.5 font-semibold">{performance.recommendation}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                      {performance && <PerformanceBadge performance={performance} />}
                     </div>
                     <p className="mt-1 truncate text-sm font-medium text-white">{ad.name}</p>
                   </div>
@@ -1594,19 +1632,7 @@ export default function Home() {
                           <div className="min-w-0 max-w-full flex-1 basis-56">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={"status status-" + campaign.status}><span />{statusLabel(campaign.status)}</span>
-                              {performance && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="inline-flex cursor-default items-center gap-1.5 text-xs font-semibold text-[#91aabb] underline decoration-dotted decoration-[#4a6478] underline-offset-2">
-                                      <span className={"size-2 shrink-0 rounded-full " + performance.dotClass} />{performance.label}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-72">
-                                    <p>{performance.reason}</p>
-                                    <p className="mt-1.5 font-semibold">{performance.recommendation}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
+                              {performance && <PerformanceBadge performance={performance} />}
                             </div>
                             <div className="mt-1 truncate font-semibold text-white">{campaign.title}</div>
                             <div className="text-xs text-[#6f8798]">{campaign.location}</div>
