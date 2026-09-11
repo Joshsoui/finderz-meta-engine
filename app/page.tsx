@@ -116,7 +116,7 @@ const STANDARD_QUESTION_LABEL: Record<string, string> = {
  * ads with leads yet) rather than forcing a judgement on too little data.
  */
 type AdPerformanceTier = "good" | "warning" | "poor";
-type AdPerformanceInfo = { tier: AdPerformanceTier; label: string; dotClass: string; reason: string };
+type AdPerformanceInfo = { tier: AdPerformanceTier; label: string; dotClass: string; reason: string; recommendation: string };
 
 const AD_PERFORMANCE_STYLE: Record<AdPerformanceTier, { label: string; dotClass: string }> = {
   good: { label: "Presteert goed", dotClass: "bg-[#4ade80]" },
@@ -132,10 +132,17 @@ const AD_PERFORMANCE_STYLE: Record<AdPerformanceTier, { label: string; dotClass:
  * has to guess the meaning of -- it's the thing you'd read before deciding
  * whether to pause the ad right there in the same row.
  */
+// Below this many leads, a CPL comparison is still mostly noise -- worth
+// showing, but the recommendation should say so rather than sound as sure
+// of itself as it would with a real sample size.
+const AD_PERFORMANCE_CONFIDENT_LEADS = 5;
+
 function getAdPerformanceInfo(ad: CampaignAd, activeAds: CampaignAd[]): AdPerformanceInfo | null {
   const comparable = activeAds.filter((other) => other.leads > 0);
   if (comparable.length < 2) return null;
   const bestCpl = Math.min(...comparable.map((other) => other.spend / other.leads));
+  const lowConfidence = ad.leads < AD_PERFORMANCE_CONFIDENT_LEADS;
+  const confidenceNote = lowConfidence ? ` Nog maar ${ad.leads} lead${ad.leads === 1 ? "" : "s"} binnen voor deze advertentie -- neem dit nog niet als zekerheid.` : "";
 
   if (ad.leads === 0) {
     if (ad.spend <= bestCpl * 2) return null;
@@ -143,25 +150,33 @@ function getAdPerformanceInfo(ad: CampaignAd, activeAds: CampaignAd[]): AdPerfor
       tier: "poor",
       ...AD_PERFORMANCE_STYLE.poor,
       reason: `Al ${euro.format(ad.spend)} uitgegeven zonder een lead, terwijl de best presterende advertentie in deze campagne op ${euro.format(bestCpl)} per lead zit.`,
+      recommendation: `Advies: pauzeer deze advertentie. Het budget van de campagne gaat dan automatisch naar de advertentie(s) die wel leads opleveren.`,
     };
   }
 
   const cpl = ad.spend / ad.leads;
   const diffPercent = Math.round(((cpl - bestCpl) / bestCpl) * 100);
   if (cpl <= bestCpl * 1.25) {
-    return { tier: "good", ...AD_PERFORMANCE_STYLE.good, reason: `Beste (of bijna beste) kosten per lead van deze campagne: ${euro.format(cpl)} per lead.` };
+    return {
+      tier: "good",
+      ...AD_PERFORMANCE_STYLE.good,
+      reason: `Beste (of bijna beste) kosten per lead van deze campagne: ${euro.format(cpl)} per lead.`,
+      recommendation: "Geen actie nodig.",
+    };
   }
   if (cpl <= bestCpl * 2) {
     return {
       tier: "warning",
       ...AD_PERFORMANCE_STYLE.warning,
       reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% hoger dan de best presterende advertentie in deze campagne (${euro.format(bestCpl)}).`,
+      recommendation: `Advies: nog niet pauzeren, wel in de gaten houden. Blijft dit zo (of wordt het erger), dan is pauzeren de volgende stap.${confidenceNote}`,
     };
   }
   return {
     tier: "poor",
     ...AD_PERFORMANCE_STYLE.poor,
-    reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% hoger dan de best presterende advertentie in deze campagne (${euro.format(bestCpl)}). Overweeg deze te pauzeren.`,
+    reason: `Kosten per lead (${euro.format(cpl)}) liggen ${diffPercent}% hoger dan de best presterende advertentie in deze campagne (${euro.format(bestCpl)}).`,
+    recommendation: `Advies: pauzeer deze advertentie${lowConfidence ? " (maar wacht dit desgewenst nog even af, zie hieronder)" : ""}. Het budget gaat dan automatisch naar de beter presterende advertentie(s).${confidenceNote}`,
   };
 }
 
@@ -244,7 +259,10 @@ function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
                               <span className={"size-2 shrink-0 rounded-full " + performance.dotClass} />{performance.label}
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-64">{performance.reason}</TooltipContent>
+                          <TooltipContent className="max-w-72">
+                            <p>{performance.reason}</p>
+                            <p className="mt-1.5 font-semibold">{performance.recommendation}</p>
+                          </TooltipContent>
                         </Tooltip>
                       )}
                     </div>
