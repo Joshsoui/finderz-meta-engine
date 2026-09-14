@@ -1,8 +1,7 @@
 import { FinderzMark } from "@/components/app-shell";
-import type { Campaign } from "@/lib/campaign-client";
-import type { CreativeFormat } from "@/lib/creative-renderer";
+import type { CreativeData, CreativeFormat } from "@/lib/creative-renderer";
 
-export function CreativePreview({ campaign, format }: { campaign: Campaign; format: CreativeFormat }) {
+export function CreativePreview({ campaign, format }: { campaign: CreativeData; format: CreativeFormat }) {
   const ratio = format === "1:1" ? "1 / 1" : format === "1.91:1" ? "1.91 / 1" : "9 / 16";
   return (
     <div className="creative-shell" style={{ aspectRatio: ratio }}>

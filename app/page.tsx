@@ -13,6 +13,7 @@ import { AppShell, FinderzMark } from "@/components/app-shell";
 import { CreativePreview } from "@/components/creative-preview";
 import { type ImportCandidate, ImportCampaignSheet } from "@/components/import-campaign-sheet";
 import { LeadFormSheet } from "@/components/lead-form-sheet";
+import { ReplaceCreativeSheet } from "@/components/replace-creative-sheet";
 import { NewCampaignSheet } from "@/components/new-campaign-sheet";
 import { PortfolioBudgetCard } from "@/components/portfolio-budget-card";
 import { deriveDailyBudgetCents } from "@/lib/campaign-engine";
@@ -275,11 +276,12 @@ function PerformanceBadge({ performance }: { performance: AdPerformanceInfo }) {
   );
 }
 
-function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
+function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged, onReplaceCreative }: {
   ads: CampaignAd[];
   connected: boolean;
   campaignId: string;
   onAdStatusChanged: (adId: string, effectiveStatus: string) => void;
+  onReplaceCreative: (ad: CampaignAd) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"active" | "all">("active");
   const [pausingId, setPausingId] = useState<string | null>(null);
@@ -356,6 +358,11 @@ function AdBreakdownTable({ ads, connected, campaignId, onAdStatusChanged }: {
                   <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="text-white">{euro.format(ad.spend)}</strong></div>
                   <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="text-white">{ad.leads}</strong></div>
                   <div><span className="block text-xs text-[#607b8d]">Kosten/lead</span><strong className="text-white">{ad.leads > 0 ? euro.format(ad.spend / ad.leads) : "—"}</strong></div>
+                  {ad.effectiveStatus === "ACTIVE" && (
+                    <button className="secondary-button" onClick={() => onReplaceCreative(ad)}>
+                      <ImageIcon className="size-4" />Foto vervangen
+                    </button>
+                  )}
                   {(ad.effectiveStatus === "ACTIVE" || ad.effectiveStatus === "PAUSED") && (
                     <button className="secondary-button" onClick={() => void toggleAdStatus(ad)} disabled={pausingId === ad.id}>
                       {pausingId === ad.id ? <LoaderCircle className="size-4 animate-spin" /> : ad.effectiveStatus === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
@@ -1110,6 +1117,7 @@ export default function Home() {
   const [leadForm, setLeadForm] = useState<LeadFormDetails | null>(null);
   const [leadFormConnected, setLeadFormConnected] = useState(false);
   const [isNewLeadFormOpen, setIsNewLeadFormOpen] = useState(false);
+  const [replaceCreativeAd, setReplaceCreativeAd] = useState<CampaignAd | null>(null);
   // Bumped whenever Meta or Indeed daily spend is saved, so the combined
   // MarketingSpendCard (which only fetches once on mount) refetches instead
   // of showing a stale total from before that edit.
@@ -1206,35 +1214,32 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchAds(campaignId: string) {
-      try {
-        const response = await fetch(`/api/campaigns/${campaignId}/ads`);
-        const payload = await response.json() as { ads?: CampaignAd[]; connected?: boolean; error?: string };
-        if (response.ok && !cancelled) {
-          setCampaignAds(payload.ads ?? []);
-          setCampaignAdsConnected(Boolean(payload.connected));
-        }
-      } catch {
-        // The performance tab still works without an ad breakdown; fail quietly.
+  async function refetchAds(campaignId: string) {
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/ads`);
+      const payload = await response.json() as { ads?: CampaignAd[]; connected?: boolean; error?: string };
+      if (response.ok) {
+        setCampaignAds(payload.ads ?? []);
+        setCampaignAdsConnected(Boolean(payload.connected));
       }
+    } catch {
+      // The performance tab still works without an ad breakdown; fail quietly.
     }
+  }
+
+  useEffect(() => {
     (async () => {
       if (!selected) {
-        if (!cancelled) {
-          setCampaignAds([]);
-          setCampaignAdsConnected(false);
-        }
+        setCampaignAds([]);
+        setCampaignAdsConnected(false);
         return;
       }
-      await fetchAds(selected.id);
+      await refetchAds(selected.id);
     })();
     // Refresh while this campaign is being viewed, since the stoplight/pause
     // decision it drives is only useful if the numbers are current.
-    const interval = selected ? setInterval(() => void fetchAds(selected.id), 60_000) : undefined;
+    const interval = selected ? setInterval(() => void refetchAds(selected.id), 60_000) : undefined;
     return () => {
-      cancelled = true;
       if (interval) clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1538,6 +1543,24 @@ export default function Home() {
             />
           )}
 
+          {selected && (
+            <ReplaceCreativeSheet
+              open={replaceCreativeAd !== null}
+              campaignId={selected.id}
+              campaign={{
+                headline: selected.headline,
+                title: selected.title,
+                location: selected.location,
+                usps: selected.usps,
+                logoImage: selected.logoImage,
+                backgroundPrompt: selected.backgroundPrompt,
+              }}
+              ad={replaceCreativeAd}
+              onClose={() => setReplaceCreativeAd(null)}
+              onReplaced={() => void refetchAds(selected.id)}
+            />
+          )}
+
           <MarketingSpendCard key={spendVersion} isMetaAutomatic={metaStatus.mode === "connected"} platformTotalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
           <TodaySpendByCampaignCard key={"breakdown-" + spendVersion} />
@@ -1744,6 +1767,7 @@ export default function Home() {
                         connected={campaignAdsConnected}
                         campaignId={selected.id}
                         onAdStatusChanged={(adId, effectiveStatus) => setCampaignAds((current) => current.map((ad) => (ad.id === adId ? { ...ad, status: effectiveStatus, effectiveStatus } : ad)))}
+                        onReplaceCreative={setReplaceCreativeAd}
                       />
                     </div>
                     <div className="mt-6 panel overflow-hidden">

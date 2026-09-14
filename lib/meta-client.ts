@@ -635,6 +635,133 @@ export async function setMetaAdStatus(metaAdId: string, status: "ACTIVE" | "PAUS
   await metaRequest(`/${metaAdId}`, credentials.accessToken, { method: "POST", params: { status } });
 }
 
+type MetaAdCreativeDetails = {
+  adSetId: string;
+  status: string;
+  linkData: { message: string; name: string; description: string; link: string; callToAction: Record<string, unknown> };
+};
+
+/**
+ * Reads what an existing ad's creative actually says -- its ad set, status,
+ * and the object_story_spec.link_data Meta already has (copy + call-to-action,
+ * which carries the lead form id). Used before building a replacement
+ * creative so the new ad keeps the exact same copy and lead form as the one
+ * it's replacing, even for ads this platform didn't itself create (imported
+ * campaigns have no local record of their copy).
+ */
+async function fetchAdCreativeDetails(metaAdId: string): Promise<MetaAdCreativeDetails> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const result = await metaRequest<{
+    adset_id: string;
+    status: string;
+    creative?: { object_story_spec?: { link_data?: { message?: string; name?: string; description?: string; link?: string; call_to_action?: Record<string, unknown> } } };
+  }>(`/${metaAdId}`, credentials.accessToken, { params: { fields: "adset_id,status,creative{object_story_spec}" } });
+
+  const linkData = result.creative?.object_story_spec?.link_data;
+  if (!linkData) throw new Error("Kon de bestaande advertentietekst niet ophalen bij Meta");
+
+  return {
+    adSetId: result.adset_id,
+    status: result.status,
+    linkData: {
+      message: linkData.message ?? "",
+      name: linkData.name ?? "",
+      description: linkData.description ?? "",
+      link: linkData.link ?? `https://www.facebook.com/${credentials.pageId}`,
+      callToAction: linkData.call_to_action ?? { type: "APPLY_NOW" },
+    },
+  };
+}
+
+/**
+ * Replaces one underperforming ad's creative image without touching the
+ * campaign, ad set, or any other ad in it. Meta doesn't allow swapping an
+ * existing ad's creative in place (see the note on createMetaCampaign), so
+ * this follows Meta's own recommended pattern for a creative refresh: build
+ * a new ad creative (same copy, same lead form, new image -- same
+ * asset_feed_spec multi-crop setup every ad on this platform already uses)
+ * and a new ad in the same ad set, matching whatever status the old ad had
+ * so delivery doesn't drop to zero, then pause the old ad.
+ */
+export async function replaceAdCreative(
+  metaAdId: string,
+  input: { title: string; imageUrls: { square: string; landscape: string; story: string } },
+): Promise<{ newAdId: string }> {
+  const credentials = getMetaCredentials();
+  if (!credentials) throw new Error("Meta is not configured");
+
+  const details = await fetchAdCreativeDetails(metaAdId);
+
+  const [squareImage, landscapeImage, storyImage] = await Promise.all([
+    uploadAdImage(credentials, input.imageUrls.square),
+    uploadAdImage(credentials, input.imageUrls.landscape),
+    uploadAdImage(credentials, input.imageUrls.story),
+  ]);
+
+  const creative = await metaRequest<{ id: string }>(`/act_${credentials.adAccountId}/adcreatives`, credentials.accessToken, {
+    method: "POST",
+    params: {
+      name: `${input.title} - creative (vernieuwd)`,
+      object_story_spec: JSON.stringify({
+        page_id: credentials.pageId,
+        link_data: {
+          message: details.linkData.message,
+          name: details.linkData.name,
+          description: details.linkData.description,
+          image_hash: squareImage.hash,
+          link: details.linkData.link,
+          call_to_action: details.linkData.callToAction,
+        },
+      }),
+      asset_feed_spec: JSON.stringify({
+        images: [
+          { hash: squareImage.hash, adlabels: [{ name: "square" }] },
+          { hash: landscapeImage.hash, adlabels: [{ name: "landscape" }] },
+          { hash: storyImage.hash, adlabels: [{ name: "story" }] },
+        ],
+        ad_formats: ["SINGLE_IMAGE"],
+        asset_customization_rules: [
+          {
+            customization_spec: {
+              publisher_platforms: ["facebook", "instagram"],
+              facebook_positions: ["story", "facebook_reels"],
+              instagram_positions: ["story", "reels"],
+            },
+            image_label: { name: "story" },
+          },
+          {
+            customization_spec: {
+              publisher_platforms: ["facebook", "instagram"],
+              facebook_positions: ["feed", "video_feeds", "marketplace", "right_hand_column", "search", "instream_banner"],
+              instagram_positions: ["stream", "explore", "explore_home"],
+            },
+            image_label: { name: "landscape" },
+          },
+        ],
+      }),
+    },
+  });
+
+  const newAdStatus = details.status === "ACTIVE" ? "ACTIVE" : "PAUSED";
+  const newAd = await metaRequest<{ id: string }>(`/act_${credentials.adAccountId}/ads`, credentials.accessToken, {
+    method: "POST",
+    params: {
+      name: `${input.title} - ad (vernieuwd)`,
+      adset_id: details.adSetId,
+      status: newAdStatus,
+      creative: JSON.stringify({ creative_id: creative.id }),
+    },
+  });
+
+  // Only pause the old ad once the new one exists and (if it needed to be
+  // active) is already serving -- never leave the ad set with zero active ads.
+  await setMetaAdStatus(metaAdId, "PAUSED");
+
+  return { newAdId: newAd.id };
+}
+
 /** Updates the campaign-level daily budget (Advantage Campaign Budget) -- used by the "scale budget" automation rule. */
 export async function updateMetaCampaignBudget(metaCampaignId: string, dailyBudgetCents: number): Promise<void> {
   const credentials = getMetaCredentials();
