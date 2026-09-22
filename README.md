@@ -20,6 +20,14 @@ Meta-only recruitment campaign control voor Finderz Keeperz.
 - Gegenereerde achtergronden worden duurzaam opgeslagen in een R2-bucket (via `/media/...`).
 - Toegang tot het hele dashboard en alle API-routes is afgeschermd met Cloudflare Access
   (alleen `@finderzkeeperz.nl`-adressen, login via e-mail-eenmalige-code).
+- **Radar / Opportunity Engine** (intelligence-laag boven de Meta Engine, shadow mode -- publiceert
+  niets automatisch): externe signalen (nieuws, regionale ontwikkelingen, CBS-arbeidsmarktdata)
+  worden verzameld, gededupliceerd en gefilterd tegen het Bedrijfsprofiel (`/instellingen`), AI
+  beoordeelt per signaal of het een echte kans is en scoort 'm (0-100, met transparante deelscores
+  en "why now"), en genereert op aanvraag kanaal-native content (LinkedIn/Instagram/Story/
+  Facebook/Meta Ad/werkinnoordholland.nu) inclusief guardrails tegen newsjacking van tragedies.
+  Zie `/radar` en `/opportunities`. Architectuur: `lib/radar/`, `lib/opportunity-engine.ts`,
+  `lib/content-engine.ts`, `lib/business-profile.ts`.
 
 ## API
 

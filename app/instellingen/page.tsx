@@ -2,6 +2,7 @@
 
 import { AlertTriangle, CheckCircle2, MousePointerClick } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { BusinessProfileCard } from "@/components/business-profile-card";
 import { PortfolioBudgetCard } from "@/components/portfolio-budget-card";
 import { useMetaStatus } from "@/lib/use-meta-status";
 
@@ -37,6 +38,7 @@ export default function InstellingenPage() {
       </article>
 
       <PortfolioBudgetCard />
+      <BusinessProfileCard />
     </AppShell>
   );
 }

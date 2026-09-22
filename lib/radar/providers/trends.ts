@@ -1,0 +1,63 @@
+import type { BusinessProfile } from "@/lib/business-profile";
+import type { NormalizedSignal, SignalProvider } from "@/lib/radar/types";
+
+/**
+ * Google has no free, official Trends API -- every working integration goes
+ * through a paid third-party wrapper (e.g. SerpApi's Google Trends engine).
+ * Per section 2/13: built correctly, gated behind a real key, never fake
+ * data. isConfigured() is false until SERPAPI_API_KEY is set, so radar-sync
+ * skips this provider entirely rather than fabricating trend signals.
+ */
+export const trendsProvider: SignalProvider = {
+  key: "trends",
+  label: "Zoektrends",
+  isConfigured: () => Boolean(process.env.SERPAPI_API_KEY),
+  missingConfigHint: "Voeg SERPAPI_API_KEY toe (serpapi.com, Google Trends engine) om zoektrends mee te nemen.",
+
+  async fetchSignals(profile: BusinessProfile): Promise<NormalizedSignal[]> {
+    const apiKey = process.env.SERPAPI_API_KEY;
+    if (!apiKey) return [];
+
+    const results: NormalizedSignal[] = [];
+    for (const keyword of profile.keywords.slice(0, 5)) {
+      const url = new URL("https://serpapi.com/search.json");
+      url.searchParams.set("engine", "google_trends");
+      url.searchParams.set("q", keyword);
+      url.searchParams.set("geo", "NL");
+      url.searchParams.set("data_type", "TIMESERIES");
+      url.searchParams.set("api_key", apiKey);
+
+      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) continue;
+
+      const payload = (await response.json()) as {
+        interest_over_time?: { timeline_data?: Array<{ date: string; values: Array<{ value: string }> }> };
+      };
+      const timeline = payload.interest_over_time?.timeline_data;
+      if (!timeline || timeline.length < 2) continue;
+
+      const latest = timeline[timeline.length - 1];
+      const previous = timeline[timeline.length - 2];
+      const latestValue = Number(latest.values[0]?.value ?? 0);
+      const previousValue = Number(previous.values[0]?.value ?? 0);
+      if (previousValue === 0 || latestValue <= previousValue * 1.3) continue; // Only surface a meaningful spike, not routine noise.
+
+      results.push({
+        title: `Zoekinteresse in "${keyword}" neemt toe`,
+        summary: `Google-zoekinteresse in "${keyword}" (Nederland) steeg van ${previousValue} naar ${latestValue} (relatieve schaal 0-100) tussen ${previous.date} en ${latest.date}.`,
+        source: "Google Trends (via SerpApi)",
+        sourceUrl: `https://trends.google.com/trends/explore?geo=NL&q=${encodeURIComponent(keyword)}`,
+        publishedAt: new Date().toISOString(),
+        category: "trends",
+        regions: profile.regions,
+        companies: [],
+        industries: [],
+        jobCategories: [],
+        keywords: [keyword],
+        rawData: { latest, previous },
+      });
+    }
+
+    return results;
+  },
+};

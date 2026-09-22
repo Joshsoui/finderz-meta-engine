@@ -1,9 +1,12 @@
 /** Cloudflare Worker entry point. */
 import handler from "vinext/server/app-router-entry";
 import { runCampaignMonitor } from "@/lib/campaign-monitor-sync";
+import { analyzePendingSignals } from "@/lib/opportunity-engine";
 import { refreshPipeline } from "@/lib/pipeline-sync";
+import { runRadarScan } from "@/lib/radar/radar-sync";
 
 const PIPELINE_CRON = "0 */6 * * *";
+const RADAR_CRON = "0 6,12,18 * * *";
 
 interface Env {
   ASSETS: Fetcher;
@@ -30,6 +33,15 @@ const worker = {
   async scheduled(event: ScheduledController, _env: Env, ctx: ExecutionContext): Promise<void> {
     if (event.cron === PIPELINE_CRON) {
       ctx.waitUntil(refreshPipeline().catch(() => {}));
+    } else if (event.cron === RADAR_CRON) {
+      // Collect first, then analyze whatever passed the free cheap filter --
+      // kept as two steps in the same run so a scan never blocks on AI calls
+      // for signals it hasn't even deduped yet.
+      ctx.waitUntil(
+        runRadarScan()
+          .then(() => analyzePendingSignals())
+          .catch(() => {})
+      );
     } else {
       ctx.waitUntil(runCampaignMonitor().catch(() => {}));
     }

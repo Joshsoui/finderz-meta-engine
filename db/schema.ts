@@ -193,3 +193,163 @@ export const accountSpendDailyLog = sqliteTable("account_spend_daily_log", {
   amountCents: integer("amount_cents").notNull(),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+// ===================================================================
+// Radar / Opportunity intelligence layer
+//
+// Deliberately generic (not Finderz-Keeperz-specific fields baked into
+// code): a Company is just a row, Finderz Keeperz is the first one. A
+// later company (different industry/region/services) reuses these exact
+// tables and the same Radar/Opportunity code with its own profile row and
+// its own signal-provider configuration -- the "Industry Autopilot" idea.
+// ===================================================================
+
+export const companies = sqliteTable("companies", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  website: text("website").notNull().default(""),
+  industry: text("industry").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/**
+ * The context the Opportunity Engine matches every signal against. Active
+ * vacancies/job categories/locations/salaries are NOT duplicated here --
+ * those already live in `campaigns` and `pipelineVacancies` and are read
+ * from there directly (see lib/business-profile.ts).
+ */
+export const businessProfiles = sqliteTable("business_profiles", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull().references(() => companies.id),
+  servicesJson: text("services_json").notNull().default("[]"),
+  targetAudiencesJson: text("target_audiences_json").notNull().default("[]"),
+  regionsJson: text("regions_json").notNull().default("[]"),
+  toneOfVoice: text("tone_of_voice").notNull().default(""),
+  uspsJson: text("usps_json").notNull().default("[]"),
+  /** JSON object: {platform: url}, e.g. {"linkedin": "...", "instagram": "..."}. */
+  socialChannelsJson: text("social_channels_json").notNull().default("{}"),
+  /** Sectors FK places candidates into, e.g. ["logistiek", "productie", "techniek"]. */
+  customerSectorsJson: text("customer_sectors_json").notNull().default("[]"),
+  /** Keywords Radar's cheap filter matches signals against -- seeded from the fields above but editable separately for tuning without touching them. */
+  keywordsJson: text("keywords_json").notNull().default("[]"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/** One normalized external signal, regardless of which provider found it (see lib/radar/providers). */
+export const signals = sqliteTable(
+  "signals",
+  {
+    id: text("id").primaryKey(),
+    provider: text("provider").notNull(), // "news" | "regional" | "labour_market" | ...
+    title: text("title").notNull(),
+    summary: text("summary").notNull().default(""),
+    source: text("source").notNull(),
+    sourceUrl: text("source_url"),
+    /** sourceUrl when present, else a hash of provider+title+publishedAt -- unique so overlapping RSS windows or re-runs never insert the same story twice. */
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    publishedAt: text("published_at"),
+    detectedAt: text("detected_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    category: text("category").notNull().default(""),
+    regionsJson: text("regions_json").notNull().default("[]"),
+    companiesJson: text("companies_json").notNull().default("[]"),
+    industriesJson: text("industries_json").notNull().default("[]"),
+    jobCategoriesJson: text("job_categories_json").notNull().default("[]"),
+    keywordsJson: text("keywords_json").notNull().default("[]"),
+    /** Raw provider payload, kept for debugging/re-analysis without re-fetching the source. */
+    rawDataJson: text("raw_data_json"),
+    /** Set once the free, rule-based cheap filter has matched this against the business profile -- only signals where this is true ever cost an AI call (section 12 cost control). */
+    passedCheapFilter: integer("passed_cheap_filter", { mode: "boolean" }).notNull().default(false),
+    status: text("status", { enum: ["new", "analyzed", "irrelevant"] }).notNull().default("new"),
+  },
+  (table) => [
+    index("idx_signals_status_detected").on(table.status, table.detectedAt),
+    index("idx_signals_provider_detected").on(table.provider, table.detectedAt),
+  ]
+);
+
+/** AI-scored marketing/recruitment opportunity derived from one signal. */
+export const opportunities = sqliteTable(
+  "opportunities",
+  {
+    id: text("id").primaryKey(),
+    signalId: text("signal_id").notNull().references(() => signals.id),
+    companyId: text("company_id").notNull().references(() => companies.id),
+    title: text("title").notNull(),
+    score: integer("score").notNull(),
+    relevanceScore: integer("relevance_score").notNull(),
+    timelinessScore: integer("timeliness_score").notNull(),
+    audienceFitScore: integer("audience_fit_score").notNull(),
+    regionalFitScore: integer("regional_fit_score").notNull(),
+    commercialPotentialScore: integer("commercial_potential_score").notNull(),
+    contentPotentialScore: integer("content_potential_score").notNull(),
+    recruitmentPotentialScore: integer("recruitment_potential_score").notNull(),
+    whyNow: text("why_now").notNull(),
+    /** campaigns.id values of matching active vacancies -- looked up at scoring time, never duplicated as separate rows. */
+    matchingCampaignIdsJson: text("matching_campaign_ids_json").notNull().default("[]"),
+    /** e.g. ["instagram", "facebook", "linkedin", "meta_ads"]. */
+    recommendedChannelsJson: text("recommended_channels_json").notNull().default("[]"),
+    /** Guardrail verdict from the AI pass itself (section 7). False means this must never be promoted to content generation, regardless of score. */
+    isAppropriate: integer("is_appropriate", { mode: "boolean" }).notNull().default(true),
+    guardrailReason: text("guardrail_reason"),
+    status: text("status", {
+      enum: ["detected", "analyzed", "opportunity", "content_generated", "review", "approved", "ready_to_publish", "dismissed"],
+    }).notNull().default("opportunity"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("idx_opportunities_status_score").on(table.status, table.score),
+    index("idx_opportunities_company_created").on(table.companyId, table.createdAt),
+  ]
+);
+
+/** Approve/dismiss feedback on an opportunity -- the raw material for later learning (section 10/13). */
+export const opportunityFeedback = sqliteTable("opportunity_feedback", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  opportunityId: text("opportunity_id").notNull().references(() => opportunities.id),
+  action: text("action", { enum: ["dismissed", "approved"] }).notNull(),
+  reason: text("reason", {
+    enum: ["irrelevant", "wrong_audience", "too_commercial", "not_interesting", "wrong_timing", "other"],
+  }),
+  note: text("note"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/** One piece of channel-native content generated from an opportunity -- never one text copy-pasted across channels (section 6). */
+export const contentPieces = sqliteTable(
+  "content_pieces",
+  {
+    id: text("id").primaryKey(),
+    opportunityId: text("opportunity_id").notNull().references(() => opportunities.id),
+    channel: text("channel", {
+      enum: ["linkedin", "instagram", "instagram_story", "facebook", "meta_ad", "werkinnoordholland"],
+    }).notNull(),
+    /** Shape depends on channel -- see lib/content-engine.ts ContentByChannel. */
+    contentJson: text("content_json").notNull(),
+    /** Source signal URL(s) the copy is allowed to reference -- guards against the AI inventing facts (section 7). */
+    sourceUrlsJson: text("source_urls_json").notNull().default("[]"),
+    status: text("status", { enum: ["review", "approved", "ready_to_publish", "dismissed"] }).notNull().default("review"),
+    /** Set once a meta_ad piece has produced a real campaign via the existing Meta Engine flow -- closes Signal -> Opportunity -> Content -> Campaign -> Performance (section 10) without a separate performance table; performance itself stays in the existing metricSnapshots/leads tables. */
+    campaignId: text("campaign_id").references(() => campaigns.id),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_content_opportunity_channel").on(table.opportunityId, table.channel)]
+);
+
+/** Every AI call the intelligence layer makes (the cheap filter is rule-based and free, so this only covers deep opportunity scoring and content generation) -- section 12's cost visibility requirement. */
+export const aiUsageLog = sqliteTable(
+  "ai_usage_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    purpose: text("purpose", { enum: ["opportunity_scoring", "content_generation"] }).notNull(),
+    model: text("model").notNull(),
+    relatedId: text("related_id"), // signalId or opportunityId, depending on purpose
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    succeeded: integer("succeeded", { mode: "boolean" }).notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_ai_usage_purpose_created").on(table.purpose, table.createdAt)]
+);

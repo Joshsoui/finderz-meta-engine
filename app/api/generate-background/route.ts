@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
     if (!apiKey) {
       return Response.json(
-        { error: "Beeldgeneratie is nog niet geconfigureerd. Voeg OPENAI_API_KEY toe aan Render." },
+        { error: "Beeldgeneratie is nog niet geconfigureerd. Voeg OPENAI_API_KEY toe via 'wrangler secret put'." },
         { status: 503 },
       );
     }
