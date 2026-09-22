@@ -5,16 +5,18 @@ import { AlertTriangle, Lightbulb, LoaderCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { OpportunityDetailSheet } from "@/components/opportunity-detail-sheet";
-import { CHANNEL_LABEL, type ContentChannel } from "@/lib/content-channels";
+import { URGENCY_LABEL, type Urgency } from "@/lib/action-types";
 
 type OpportunityRow = {
   id: string;
   title: string;
   score: number;
+  effectiveScore: number;
   whyNow: string;
   matchingCampaignIdsJson: string;
-  recommendedChannelsJson: string;
   isAppropriate: boolean;
+  urgency: Urgency;
+  optimalActionBeforeAt: string | null;
   status: string;
   createdAt: string;
   signalCategory: string;
@@ -32,6 +34,13 @@ const STATUS_TABS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Alle" },
   { value: "dismissed", label: "Afgewezen" },
 ];
+
+const URGENCY_CLASS: Record<Urgency, string> = {
+  evergreen: "status-live",
+  normal: "status-live",
+  time_sensitive: "status-attention",
+  breaking: "status-paused",
+};
 
 const dateFormat = new Intl.DateTimeFormat("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -96,21 +105,21 @@ export default function OpportunitiesPage() {
     return opportunities.filter((opportunity) => {
       if (periodFilter === "today" && !isToday(opportunity.createdAt)) return false;
       if (periodFilter === "week" && !isThisWeek(opportunity.createdAt)) return false;
-      if (minScore && opportunity.score < 70) return false;
+      if (minScore && opportunity.effectiveScore < 70) return false;
       return true;
     });
   }, [opportunities, periodFilter, minScore]);
 
-  const highValueCount = opportunities.filter((opportunity) => opportunity.score >= 70 && opportunity.status === "opportunity").length;
+  const highValueCount = opportunities.filter((opportunity) => opportunity.effectiveScore >= 70 && opportunity.status === "opportunity").length;
 
   return (
-    <AppShell active="opportunities" title="Opportunities" subtitle="AI-gescoorde marketing- en recruitmentkansen uit de Radar">
+    <AppShell active="opportunities" title="Opportunities" subtitle="AI-gescoorde kansen, met per kans de best passende actie -- niet automatisch een social post">
       <article className="panel overflow-hidden">
         <div className="panel-header">
           <div>
             <div className="eyebrow"><Lightbulb className="size-3.5" />Good morning</div>
             <h2>{highValueCount > 0 ? `${highValueCount} high-value opportunit${highValueCount === 1 ? "y" : "ies"} gedetecteerd` : "Geen nieuwe high-value opportunities"}</h2>
-            <p className="mt-1 text-xs text-[#607b8d]">Niets hier wordt automatisch gepubliceerd of geadverteerd -- alles wacht op jouw beoordeling.</p>
+            <p className="mt-1 text-xs text-[#607b8d]">Niets hier wordt automatisch gepubliceerd of geadverteerd -- alles wacht op jouw beoordeling. Scores dalen automatisch naarmate een kans ouder wordt.</p>
           </div>
           <button className="primary-button disabled:cursor-wait disabled:opacity-60" onClick={() => void scanNow()} disabled={isScanning}>
             {isScanning ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
@@ -143,13 +152,16 @@ export default function OpportunitiesPage() {
         ) : (
           <div className="divide-y divide-white/8">
             {filtered.map((opportunity) => {
-              const recommendedChannels = JSON.parse(opportunity.recommendedChannelsJson) as string[];
               const matchingCount = (JSON.parse(opportunity.matchingCampaignIdsJson) as string[]).length;
+              const isDecayed = opportunity.effectiveScore < opportunity.score;
               return (
                 <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4" key={opportunity.id}>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-[#0f8db7]/15 px-2.5 py-0.5 text-sm font-bold text-[#5bc0df]">{opportunity.score}</span>
+                      <span className="rounded-full bg-[#0f8db7]/15 px-2.5 py-0.5 text-sm font-bold text-[#5bc0df]">
+                        {opportunity.effectiveScore}{isDecayed && <span className="ml-1 font-normal text-[#6f8798]">(was {opportunity.score})</span>}
+                      </span>
+                      <span className={"status " + URGENCY_CLASS[opportunity.urgency]}><span />{URGENCY_LABEL[opportunity.urgency]}</span>
                       <span className="text-xs font-bold uppercase tracking-wide text-[#607b8d]">{opportunity.signalCategory.replace("_", " ")}</span>
                       {!opportunity.isAppropriate && (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#f2a1a5]"><AlertTriangle className="size-3.5" />Geblokkeerd</span>
@@ -161,7 +173,6 @@ export default function OpportunitiesPage() {
                       <span>{opportunity.signalSource}</span>
                       <span>· {dateFormat.format(new Date(opportunity.createdAt))}</span>
                       {matchingCount > 0 && <span>· {matchingCount} matchende vacature{matchingCount === 1 ? "" : "s"}</span>}
-                      {recommendedChannels.length > 0 && <span>· {recommendedChannels.map((channel) => CHANNEL_LABEL[channel as ContentChannel] ?? channel).join(", ")}</span>}
                     </div>
                   </div>
                   <button className="secondary-button shrink-0" onClick={() => setSelectedId(opportunity.id)}>Bekijk</button>

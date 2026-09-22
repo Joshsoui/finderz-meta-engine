@@ -62,6 +62,19 @@ function parseJsonRecord(value: string | null | undefined): Record<string, strin
   }
 }
 
+/**
+ * Every company the Radar/Opportunity Engine should match signals against
+ * (section 6/8: "MATCH TO COMPANY" is an explicit step, and Company #2
+ * must slot in without touching this code). Falls back to just
+ * DEFAULT_COMPANY_ID when no company has been onboarded via /instellingen
+ * yet, so the pipeline still works before a real companies row exists.
+ */
+export async function listCompanyIds(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.select({ id: companies.id }).from(companies);
+  return rows.length > 0 ? rows.map((row) => row.id) : [DEFAULT_COMPANY_ID];
+}
+
 /** Reads the stored profile, falling back to defaultProfile() when nothing has been saved yet -- same "read with fallback, upsert on save" pattern as lib/portfolio-budget.ts. */
 export async function getBusinessProfile(companyId: string = DEFAULT_COMPANY_ID): Promise<BusinessProfile> {
   const db = await getDb();

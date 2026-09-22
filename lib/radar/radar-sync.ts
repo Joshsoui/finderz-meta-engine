@@ -1,9 +1,11 @@
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { signals } from "@/db/schema";
+import { signalProviderState, signals } from "@/db/schema";
 import { getBusinessProfile } from "@/lib/business-profile";
 import { buildDedupeKey } from "@/lib/radar/dedupe";
 import { passesCheapFilter } from "@/lib/radar/cheap-filter";
 import { SIGNAL_PROVIDERS } from "@/lib/radar/providers";
+import type { SignalProvider } from "@/lib/radar/types";
 
 export type RadarScanResult = {
   scanned: number;
@@ -11,29 +13,63 @@ export type RadarScanResult = {
   passedFilter: number;
   errors: string[];
   skippedProviders: string[];
+  /** Providers that are configured but not yet due per their own scanFrequencyMinutes (section 1) -- distinct from skippedProviders, which is "not configured at all". */
+  notDueProviders: string[];
 };
 
+/** True once a provider's own scanFrequencyMinutes has elapsed since its last run (or it has never run) -- the always-on scheduling check (section 1). */
+async function isProviderDue(provider: SignalProvider): Promise<boolean> {
+  const db = await getDb();
+  const [state] = await db.select().from(signalProviderState).where(eq(signalProviderState.provider, provider.key)).limit(1);
+  if (!state?.lastRunAt) return true;
+  const elapsedMinutes = (Date.now() - new Date(state.lastRunAt).getTime()) / (60 * 1000);
+  return elapsedMinutes >= provider.scanFrequencyMinutes;
+}
+
+async function recordProviderRun(providerKey: string, scanned: number, inserted: number, error: string | null) {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  await db
+    .insert(signalProviderState)
+    .values({ provider: providerKey, lastRunAt: now, lastRunScanned: scanned, lastRunInserted: inserted, lastError: error })
+    .onConflictDoUpdate({
+      target: signalProviderState.provider,
+      set: { lastRunAt: now, lastRunScanned: scanned, lastRunInserted: inserted, lastError: error },
+    });
+}
+
 /**
- * One full Radar scan cycle (section 2/11): collect from every configured
- * provider, normalize, dedupe against what's already stored, then run the
- * free cheap filter. Deep AI opportunity scoring is a separate step
- * (lib/opportunity-engine.ts), triggered on whatever passed the filter here
- * -- kept apart so a scan never itself spends AI budget.
+ * One Radar scan cycle (section 1/2/11): for each provider that is
+ * configured AND due (per its own scanFrequencyMinutes, unless `force` is
+ * set -- the manual "Scan nu" button), collect, normalize, dedupe against
+ * what's already stored, then run the free cheap filter. Deep AI
+ * opportunity scoring is a separate step (lib/opportunity-engine.ts),
+ * triggered on whatever passed the filter here -- kept apart so a scan
+ * never itself spends AI budget. Meant to be called by a frequent cron
+ * tick (every 10 minutes) so this app behaves as always-on monitoring
+ * without every provider re-running on every tick.
  */
-export async function runRadarScan(): Promise<RadarScanResult> {
+export async function runRadarScan(options: { force?: boolean } = {}): Promise<RadarScanResult> {
   const db = await getDb();
   const profile = await getBusinessProfile();
 
-  const result: RadarScanResult = { scanned: 0, inserted: 0, passedFilter: 0, errors: [], skippedProviders: [] };
+  const result: RadarScanResult = { scanned: 0, inserted: 0, passedFilter: 0, errors: [], skippedProviders: [], notDueProviders: [] };
 
   for (const provider of SIGNAL_PROVIDERS) {
     if (!provider.isConfigured()) {
       result.skippedProviders.push(provider.key);
       continue;
     }
+    if (!options.force && !(await isProviderDue(provider))) {
+      result.notDueProviders.push(provider.key);
+      continue;
+    }
 
+    let providerScanned = 0;
+    let providerInserted = 0;
     try {
       const fetched = await provider.fetchSignals(profile);
+      providerScanned = fetched.length;
       result.scanned += fetched.length;
 
       for (const signal of fetched) {
@@ -67,11 +103,15 @@ export async function runRadarScan(): Promise<RadarScanResult> {
 
         if (inserted.length > 0) {
           result.inserted += 1;
+          providerInserted += 1;
           if (passedFilter) result.passedFilter += 1;
         }
       }
+      await recordProviderRun(provider.key, providerScanned, providerInserted, null);
     } catch (error) {
-      result.errors.push(`${provider.key}: ${error instanceof Error ? error.message : "onbekende fout"}`);
+      const message = error instanceof Error ? error.message : "onbekende fout";
+      result.errors.push(`${provider.key}: ${message}`);
+      await recordProviderRun(provider.key, providerScanned, providerInserted, message);
     }
   }
 

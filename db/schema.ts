@@ -287,11 +287,21 @@ export const opportunities = sqliteTable(
     whyNow: text("why_now").notNull(),
     /** campaigns.id values of matching active vacancies -- looked up at scoring time, never duplicated as separate rows. */
     matchingCampaignIdsJson: text("matching_campaign_ids_json").notNull().default("[]"),
-    /** e.g. ["instagram", "facebook", "linkedin", "meta_ads"]. */
-    recommendedChannelsJson: text("recommended_channels_json").notNull().default("[]"),
     /** Guardrail verdict from the AI pass itself (section 7). False means this must never be promoted to content generation, regardless of score. */
     isAppropriate: integer("is_appropriate", { mode: "boolean" }).notNull().default(true),
     guardrailReason: text("guardrail_reason"),
+    /**
+     * Timing intelligence (section 5): how fast this opportunity's value
+     * fades. `score` is the AI's base judgement at detection time and never
+     * changes -- the "current" score shown anywhere is always computed at
+     * read time as score minus decayRatePerDay * days-since-detected (see
+     * lib/opportunity-decay.ts), never mutated in place, so the reasoning
+     * stays auditable.
+     */
+    urgency: text("urgency", { enum: ["evergreen", "normal", "time_sensitive", "breaking"] }).notNull().default("normal"),
+    decayRatePerDay: integer("decay_rate_per_day").notNull().default(1),
+    /** AI's estimate of the latest moment action still makes sense -- shown as a deadline, not enforced. */
+    optimalActionBeforeAt: text("optimal_action_before_at"),
     status: text("status", {
       enum: ["detected", "analyzed", "opportunity", "content_generated", "review", "approved", "ready_to_publish", "dismissed"],
     }).notNull().default("opportunity"),
@@ -302,6 +312,61 @@ export const opportunities = sqliteTable(
     index("idx_opportunities_status_score").on(table.status, table.score),
     index("idx_opportunities_company_created").on(table.companyId, table.createdAt),
   ]
+);
+
+/**
+ * Section 3/4: an Opportunity does NOT imply "make a social post" -- the AI
+ * scores every candidate action type for fit, and the UI/API surfaces the
+ * ranked list rather than a single hardcoded next step. One opportunity has
+ * many of these (typically the full ACTION_TYPES set, section 3), each with
+ * its own transparent score + reasoning.
+ */
+export const actionRecommendations = sqliteTable(
+  "action_recommendations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    opportunityId: text("opportunity_id").notNull().references(() => opportunities.id),
+    action: text("action", {
+      enum: [
+        "ignore", "monitor", "social_post", "linkedin_post", "instagram_post", "instagram_story", "reel",
+        "meta_campaign", "blog", "landing_page", "email_campaign", "pr_opportunity", "sales_alert",
+        "recruitment_campaign", "website_update",
+      ],
+    }).notNull(),
+    score: integer("score").notNull(),
+    reasoning: text("reasoning").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_action_recs_opportunity_score").on(table.opportunityId, table.score)]
+);
+
+/**
+ * The learning loop's "what did we actually do" record (section 7): which
+ * recommended action a human picked, and (for actions this platform can
+ * execute) what it produced -- a content piece or a Meta campaign. Distinct
+ * from opportunityFeedback (which is about the *opportunity* as a whole,
+ * approve/dismiss/why) -- this is about the *action* chosen from among the
+ * scored recommendations.
+ */
+export const actionsTaken = sqliteTable(
+  "actions_taken",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    opportunityId: text("opportunity_id").notNull().references(() => opportunities.id),
+    action: text("action", {
+      enum: [
+        "ignore", "monitor", "social_post", "linkedin_post", "instagram_post", "instagram_story", "reel",
+        "meta_campaign", "blog", "landing_page", "email_campaign", "pr_opportunity", "sales_alert",
+        "recruitment_campaign", "website_update",
+      ],
+    }).notNull(),
+    status: text("status", { enum: ["chosen", "completed", "dismissed"] }).notNull().default("chosen"),
+    contentPieceId: text("content_piece_id"),
+    campaignId: text("campaign_id").references(() => campaigns.id),
+    note: text("note"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_actions_taken_opportunity").on(table.opportunityId)]
 );
 
 /** Approve/dismiss feedback on an opportunity -- the raw material for later learning (section 10/13). */
@@ -323,7 +388,7 @@ export const contentPieces = sqliteTable(
     id: text("id").primaryKey(),
     opportunityId: text("opportunity_id").notNull().references(() => opportunities.id),
     channel: text("channel", {
-      enum: ["linkedin", "instagram", "instagram_story", "facebook", "meta_ad", "werkinnoordholland"],
+      enum: ["linkedin", "instagram", "instagram_story", "reel", "facebook", "meta_ad", "blog", "landing_page", "email_campaign", "werkinnoordholland"],
     }).notNull(),
     /** Shape depends on channel -- see lib/content-engine.ts ContentByChannel. */
     contentJson: text("content_json").notNull(),
@@ -353,3 +418,19 @@ export const aiUsageLog = sqliteTable(
   },
   (table) => [index("idx_ai_usage_purpose_created").on(table.purpose, table.createdAt)]
 );
+
+/**
+ * Always-on scheduling state (section 1): one row per SignalProvider,
+ * tracking when it last actually ran. Each provider declares its own
+ * scanFrequencyMinutes in code (lib/radar/types.ts) -- this table is what
+ * lets a single frequent cron tick (every 10 minutes) decide which
+ * providers are actually due, instead of every provider running on every
+ * tick regardless of its own cadence.
+ */
+export const signalProviderState = sqliteTable("signal_provider_state", {
+  provider: text("provider").primaryKey(),
+  lastRunAt: text("last_run_at"),
+  lastRunScanned: integer("last_run_scanned").notNull().default(0),
+  lastRunInserted: integer("last_run_inserted").notNull().default(0),
+  lastError: text("last_error"),
+});

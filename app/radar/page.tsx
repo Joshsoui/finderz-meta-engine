@@ -19,7 +19,23 @@ type SignalRow = {
   status: "new" | "analyzed" | "irrelevant";
 };
 
-type ProviderStatus = { key: string; label: string; configured: boolean; missingConfigHint?: string };
+type ProviderStatus = {
+  key: string;
+  label: string;
+  scanFrequencyMinutes: number;
+  configured: boolean;
+  missingConfigHint?: string;
+  lastRunAt: string | null;
+  lastRunScanned: number;
+  lastRunInserted: number;
+  lastError: string | null;
+};
+
+function formatFrequency(minutes: number): string {
+  if (minutes < 60) return `elke ${minutes} min`;
+  if (minutes < 24 * 60) return `elke ${Math.round(minutes / 60)} uur`;
+  return `elke ${Math.round(minutes / (24 * 60))} dag${minutes > 24 * 60 ? "en" : ""}`;
+}
 
 type StatusFilter = "all" | "new" | "analyzed" | "irrelevant";
 
@@ -80,7 +96,7 @@ export default function RadarPage() {
   }
 
   return (
-    <AppShell active="radar" title="Radar" subtitle="Externe signalen die relevant kunnen zijn voor Finderz Keeperz">
+    <AppShell active="radar" title="Radar" subtitle="Always-on monitoring -- controleert automatisch en periodiek externe bronnen, 24/7">
       <article className="panel overflow-hidden">
         <div className="panel-header">
           <div>
@@ -95,7 +111,17 @@ export default function RadarPage() {
                 {provider.configured ? <CheckCircle2 className="size-4 text-[#4ade80]" /> : <AlertCircle className="size-4 text-[#df9826]" />}
                 <span className="text-sm font-semibold text-white">{provider.label}</span>
               </div>
-              <p className="mt-1 text-xs text-[#7f97a8]">{provider.configured ? "Actief" : provider.missingConfigHint || "Nog niet geconfigureerd"}</p>
+              <p className="mt-1 text-xs text-[#7f97a8]">
+                {provider.configured ? `Actief · ${formatFrequency(provider.scanFrequencyMinutes)}` : provider.missingConfigHint || "Nog niet geconfigureerd"}
+              </p>
+              {provider.configured && (
+                <p className="mt-1 text-xs text-[#607b8d]">
+                  {provider.lastRunAt
+                    ? `Laatst gedraaid: ${dateFormat.format(new Date(provider.lastRunAt))} (${provider.lastRunScanned} gevonden, ${provider.lastRunInserted} nieuw)`
+                    : "Nog niet gedraaid -- wacht op de eerste cron-tick of klik Scan nu"}
+                </p>
+              )}
+              {provider.lastError && <p className="mt-1 text-xs text-[#f2a1a5]">Laatste fout: {provider.lastError}</p>}
             </div>
           ))}
         </div>

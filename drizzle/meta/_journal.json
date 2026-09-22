@@ -127,6 +127,20 @@
       "when": 1790060898383,
       "tag": "0017_even_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790062214328,
+      "tag": "0018_brief_leo",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790062226050,
+      "tag": "0019_sturdy_dorian_gray",
+      "breakpoints": true
     }
   ]
 }

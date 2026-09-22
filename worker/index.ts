@@ -6,7 +6,13 @@ import { refreshPipeline } from "@/lib/pipeline-sync";
 import { runRadarScan } from "@/lib/radar/radar-sync";
 
 const PIPELINE_CRON = "0 */6 * * *";
-const RADAR_CRON = "0 6,12,18 * * *";
+// Fires every 10 minutes -- always-on monitoring (section 1), not a fixed
+// few-times-a-day schedule. Each tick only actually runs the providers that
+// are due per their own scanFrequencyMinutes (see lib/radar/radar-sync.ts),
+// so this being frequent doesn't mean every source gets hit every 10
+// minutes -- it means the fastest-tier sources (news, 30 min) never wait
+// longer than one extra tick past their own cadence.
+const RADAR_CRON = "*/10 * * * *";
 
 interface Env {
   ASSETS: Fetcher;

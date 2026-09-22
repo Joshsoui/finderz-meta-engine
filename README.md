@@ -20,14 +20,33 @@ Meta-only recruitment campaign control voor Finderz Keeperz.
 - Gegenereerde achtergronden worden duurzaam opgeslagen in een R2-bucket (via `/media/...`).
 - Toegang tot het hele dashboard en alle API-routes is afgeschermd met Cloudflare Access
   (alleen `@finderzkeeperz.nl`-adressen, login via e-mail-eenmalige-code).
-- **Radar / Opportunity Engine** (intelligence-laag boven de Meta Engine, shadow mode -- publiceert
-  niets automatisch): externe signalen (nieuws, regionale ontwikkelingen, CBS-arbeidsmarktdata)
-  worden verzameld, gededupliceerd en gefilterd tegen het Bedrijfsprofiel (`/instellingen`), AI
-  beoordeelt per signaal of het een echte kans is en scoort 'm (0-100, met transparante deelscores
-  en "why now"), en genereert op aanvraag kanaal-native content (LinkedIn/Instagram/Story/
-  Facebook/Meta Ad/werkinnoordholland.nu) inclusief guardrails tegen newsjacking van tragedies.
-  Zie `/radar` en `/opportunities`. Architectuur: `lib/radar/`, `lib/opportunity-engine.ts`,
-  `lib/content-engine.ts`, `lib/business-profile.ts`.
+- **Radar / Opportunity Engine** -- de AI marketing intelligence-laag boven de Meta Engine
+  (kernmodel: signals -> understand -> opportunity -> decide -> action -> result -> learn),
+  shadow mode: publiceert of adverteert nooit automatisch.
+  - **Always-on Radar**: elke signal provider draait op zijn eigen cadans (nieuws elke 30 min,
+    regionaal elk uur, CBS-arbeidsmarktdata dagelijks) via een cron-tick elke 10 minuten die per
+    bron checkt of die aan de beurt is (`signal_provider_state`) -- geen handmatige trigger nodig.
+    Bronnen: Google News RSS (nieuws + regionaal), CBS StatLine open data (arbeidsmarkt); een
+    Trends-provider is correct gebouwd maar wacht op een betaalde `SERPAPI_API_KEY`.
+  - **Opportunity ≠ content**: elk signaal wordt gededupliceerd, gefilterd tegen het
+    Bedrijfsprofiel (`/instellingen`) en pas dan AI-beoordeeld -- niet elk signaal wordt een
+    Opportunity. Score 0-100 met transparante deelscores, "why now", urgency (evergreen/normaal/
+    tijdsgevoelig/breaking) en een vervalsnelheid: de getoonde score daalt automatisch naarmate
+    een kans ouder wordt, zonder de oorspronkelijke AI-score te overschrijven.
+  - **Action Recommendation Engine**: per Opportunity scoort de AI alle 15 mogelijke acties apart
+    (ignore/monitor/social_post/linkedin_post/instagram_post/instagram_story/reel/meta_campaign/
+    blog/landing_page/email_campaign/pr_opportunity/sales_alert/recruitment_campaign/
+    website_update) met een eigen score + onderbouwing -- nooit automatisch "dus een social post".
+    Combineert extern signaal + interne vacaturematch + performance van eerdere campagnes op
+    matchende vacatures.
+  - **Multi-company klaar**: matching loopt over alle bedrijven in `companies` (nu alleen
+    Finderz Keeperz), zodat een tweede bedrijf dezelfde architectuur hergebruikt.
+  - **Learning loop**: elke gekozen actie (`actions_taken`) en elke approve/dismiss
+    (`opportunity_feedback`) wordt vastgelegd, content-acties gekoppeld aan de gegenereerde
+    content en (voor Meta-campagnes) aan de echte campagne -- zodat later te herleiden is welk
+    signaal, welke opportunity en welke actie daadwerkelijk resultaat opleverden.
+  - Zie `/radar` en `/opportunities`. Architectuur: `lib/radar/`, `lib/opportunity-engine.ts`,
+    `lib/action-types.ts`, `lib/opportunity-decay.ts`, `lib/content-engine.ts`, `lib/business-profile.ts`.
 
 ## API
 

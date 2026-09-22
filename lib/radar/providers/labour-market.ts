@@ -38,6 +38,7 @@ async function fetchLatestJobsTrend(): Promise<{ latest: CbsObservation; previou
 export const labourMarketProvider: SignalProvider = {
   key: "labour_market",
   label: "Arbeidsmarktdata (CBS)",
+  scanFrequencyMinutes: 24 * 60, // "slow-moving dataset" tier (section 1) -- CBS updates this table quarterly.
   isConfigured: () => true, // CBS StatLine OData is public, no key required.
 
   async fetchSignals(profile: BusinessProfile): Promise<NormalizedSignal[]> {

@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { opportunities, signals } from "@/db/schema";
 import { errorResponse } from "@/lib/api-error";
+import { computeEffectiveScore } from "@/lib/opportunity-decay";
 
 const STATUS_VALUES = ["opportunity", "content_generated", "review", "approved", "ready_to_publish", "dismissed"] as const;
 
@@ -25,9 +26,11 @@ export async function GET(request: Request) {
         recruitmentPotentialScore: opportunities.recruitmentPotentialScore,
         whyNow: opportunities.whyNow,
         matchingCampaignIdsJson: opportunities.matchingCampaignIdsJson,
-        recommendedChannelsJson: opportunities.recommendedChannelsJson,
         isAppropriate: opportunities.isAppropriate,
         guardrailReason: opportunities.guardrailReason,
+        urgency: opportunities.urgency,
+        decayRatePerDay: opportunities.decayRatePerDay,
+        optimalActionBeforeAt: opportunities.optimalActionBeforeAt,
         status: opportunities.status,
         createdAt: opportunities.createdAt,
         signalCategory: signals.category,
@@ -41,7 +44,14 @@ export async function GET(request: Request) {
       .orderBy(desc(opportunities.score), desc(opportunities.createdAt))
       .limit(200);
 
-    return Response.json({ opportunities: rows });
+    // effectiveScore is derived at read time (section 5) -- score itself is
+    // never mutated, so a breaking opportunity's list ranking quietly drops
+    // as it goes stale without rewriting the AI's original judgement.
+    const withEffectiveScore = rows
+      .map((row) => ({ ...row, effectiveScore: computeEffectiveScore(row.score, row.decayRatePerDay, row.createdAt) }))
+      .sort((a, b) => b.effectiveScore - a.effectiveScore);
+
+    return Response.json({ opportunities: withEffectiveScore });
   } catch (error) {
     return errorResponse(error, "Opportunities unavailable");
   }

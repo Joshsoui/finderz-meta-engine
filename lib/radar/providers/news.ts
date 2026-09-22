@@ -15,6 +15,7 @@ const INTENT_QUERIES = [
 export const newsProvider: SignalProvider = {
   key: "news",
   label: "Nieuws & arbeidsmarktnieuws",
+  scanFrequencyMinutes: 30, // "breaking/high-priority" tier (section 1) -- free and cheap to poll often.
   isConfigured: () => true, // Google News RSS needs no key.
 
   async fetchSignals(profile: BusinessProfile): Promise<NormalizedSignal[]> {

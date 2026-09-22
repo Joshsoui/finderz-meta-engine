@@ -8,6 +8,7 @@ const REGIONAL_INTENTS = ["nieuwe bedrijven vestiging", "bedrijventerrein uitbre
 export const regionalProvider: SignalProvider = {
   key: "regional",
   label: "Regionale ontwikkelingen",
+  scanFrequencyMinutes: 60, // "general news" tier (section 1).
   isConfigured: () => true,
 
   async fetchSignals(profile: BusinessProfile): Promise<NormalizedSignal[]> {

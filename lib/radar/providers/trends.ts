@@ -11,6 +11,7 @@ import type { NormalizedSignal, SignalProvider } from "@/lib/radar/types";
 export const trendsProvider: SignalProvider = {
   key: "trends",
   label: "Zoektrends",
+  scanFrequencyMinutes: 6 * 60, // "government/regulatory... meerdere keren per dag" tier (section 1) -- search interest moves slower than breaking news.
   isConfigured: () => Boolean(process.env.SERPAPI_API_KEY),
   missingConfigHint: "Voeg SERPAPI_API_KEY toe (serpapi.com, Google Trends engine) om zoektrends mee te nemen.",
 

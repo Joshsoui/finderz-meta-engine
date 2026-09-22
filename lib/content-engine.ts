@@ -1,8 +1,13 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { aiUsageLog, campaigns, contentPieces, opportunities, signals } from "@/db/schema";
+import { actionsTaken, aiUsageLog, campaigns, contentPieces, opportunities, signals } from "@/db/schema";
+import { ACTION_TO_CONTENT_CHANNEL, type ActionType } from "@/lib/action-types";
 import { getBusinessProfile } from "@/lib/business-profile";
 import type { ContentChannel } from "@/lib/content-channels";
+
+const CHANNEL_TO_ACTION: Partial<Record<ContentChannel, ActionType>> = Object.fromEntries(
+  Object.entries(ACTION_TO_CONTENT_CHANNEL).map(([action, channel]) => [channel, action])
+);
 
 const CHANNEL_SCHEMA: Record<ContentChannel, { instructions: string; schema: Record<string, unknown> }> = {
   linkedin: {
@@ -32,6 +37,18 @@ const CHANNEL_SCHEMA: Record<ContentChannel, { instructions: string; schema: Rec
       required: ["frames", "cta"],
     },
   },
+  reel: {
+    instructions: "Schrijf een kort Reel-script: een scroll-stopping hook, 3 tot 6 scenes (elk een korte regie-aanwijzing + wat er in beeld gebeurt), een caption en een CTA.",
+    schema: {
+      type: "object", additionalProperties: false,
+      properties: {
+        hook: { type: "string" },
+        script: { type: "array", minItems: 3, maxItems: 6, items: { type: "object", additionalProperties: false, properties: { scene: { type: "string" }, visual: { type: "string" } }, required: ["scene", "visual"] } },
+        caption: { type: "string" }, cta: { type: "string" },
+      },
+      required: ["hook", "script", "caption", "cta"],
+    },
+  },
   facebook: {
     instructions: "Schrijf toegankelijke, laagdrempelige Facebook-content, eventueel met een lokale/regionale insteek. Leadgericht: duidelijk wat de lezer moet doen. Sluit af met een CTA.",
     schema: {
@@ -49,6 +66,30 @@ const CHANNEL_SCHEMA: Record<ContentChannel, { instructions: string; schema: Rec
         cta: { type: "string" }, creativeConcept: { type: "string" }, audienceSuggestion: { type: "string" },
       },
       required: ["primaryText", "headline", "description", "cta", "creativeConcept", "audienceSuggestion"],
+    },
+  },
+  blog: {
+    instructions: "Schrijf een kort blogartikel (titel, intro-alinea, body met kopjes waar relevant, CTA) dat het onderwerp uitlegt vanuit het perspectief van het bedrijf, gebaseerd op de brongegevens.",
+    schema: {
+      type: "object", additionalProperties: false,
+      properties: { title: { type: "string" }, intro: { type: "string" }, body: { type: "string" }, cta: { type: "string" } },
+      required: ["title", "intro", "body", "cta"],
+    },
+  },
+  landing_page: {
+    instructions: "Schrijf landingspagina-copy: headline, subheadline, body (kort, scanbaar, met de kern van het aanbod) en CTA.",
+    schema: {
+      type: "object", additionalProperties: false,
+      properties: { headline: { type: "string" }, subheadline: { type: "string" }, body: { type: "string" }, cta: { type: "string" } },
+      required: ["headline", "subheadline", "body", "cta"],
+    },
+  },
+  email_campaign: {
+    instructions: "Schrijf een e-mailcampagne: subject line, preheader (korte preview-tekst), body en CTA.",
+    schema: {
+      type: "object", additionalProperties: false,
+      properties: { subject: { type: "string" }, preheader: { type: "string" }, body: { type: "string" }, cta: { type: "string" } },
+      required: ["subject", "preheader", "body", "cta"],
     },
   },
   werkinnoordholland: {
@@ -141,6 +182,11 @@ export async function generateContentForChannel(opportunityId: string, channel: 
   });
 
   await db.update(opportunities).set({ status: "content_generated", updatedAt: now }).where(eq(opportunities.id, opportunityId));
+
+  const matchedAction = CHANNEL_TO_ACTION[channel];
+  if (matchedAction) {
+    await db.insert(actionsTaken).values({ opportunityId, action: matchedAction, status: "chosen", contentPieceId, createdAt: now });
+  }
 
   return { contentPieceId };
 }
