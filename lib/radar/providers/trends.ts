@@ -32,16 +32,26 @@ export const trendsProvider: SignalProvider = {
       if (!response.ok) continue;
 
       const payload = (await response.json()) as {
-        interest_over_time?: { timeline_data?: Array<{ date: string; values: Array<{ value: string }> }> };
+        interest_over_time?: { timeline_data?: Array<{ date: string; values: Array<{ value: string }>; partial_data?: boolean }> };
       };
-      const timeline = payload.interest_over_time?.timeline_data;
-      if (!timeline || timeline.length < 2) continue;
+      // The most recent week is often still in progress (partial_data: true,
+      // confirmed against the real API -- its value reads as an artificial 0
+      // while the week is incomplete) and would otherwise always look like a
+      // drop, never a spike. Drop it and compare the last two *complete*
+      // weeks instead.
+      const timeline = (payload.interest_over_time?.timeline_data ?? []).filter((point) => !point.partial_data);
+      if (timeline.length < 2) continue;
 
       const latest = timeline[timeline.length - 1];
       const previous = timeline[timeline.length - 2];
       const latestValue = Number(latest.values[0]?.value ?? 0);
       const previousValue = Number(previous.values[0]?.value ?? 0);
-      if (previousValue === 0 || latestValue <= previousValue * 1.3) continue; // Only surface a meaningful spike, not routine noise.
+      // Confirmed live against the real API: a keyword with barely any
+      // search volume (e.g. 2 -> 3) clears a 1.3x ratio check just as
+      // easily as a real spike (29 -> 51) -- below MIN_SIGNAL_VALUE the
+      // relative-scale numbers are just noise, not a trend.
+      const MIN_SIGNAL_VALUE = 10;
+      if (previousValue === 0 || latestValue < MIN_SIGNAL_VALUE || latestValue <= previousValue * 1.3) continue;
 
       results.push({
         title: `Zoekinteresse in "${keyword}" neemt toe`,
