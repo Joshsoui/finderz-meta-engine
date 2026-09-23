@@ -26,8 +26,10 @@ Meta-only recruitment campaign control voor Finderz Keeperz.
   - **Always-on Radar**: elke signal provider draait op zijn eigen cadans (nieuws elke 30 min,
     regionaal elk uur, CBS-arbeidsmarktdata dagelijks) via een cron-tick elke 10 minuten die per
     bron checkt of die aan de beurt is (`signal_provider_state`) -- geen handmatige trigger nodig.
-    Bronnen: Google News RSS (nieuws + regionaal), CBS StatLine open data (arbeidsmarkt); een
-    Trends-provider is correct gebouwd maar wacht op een betaalde `SERPAPI_API_KEY`.
+    Bronnen: Google News RSS (nieuws + regionaal + vakpers), CBS StatLine open data (arbeidsmarkt),
+    Google Trends (via SerpApi, `SERPAPI_API_KEY`). De vakpers-provider scoped Google News RSS met
+    `site:`-filters naar sectorspecifieke vakbladen (bijv. Logistiek, Nieuwsblad Transport) --
+    die zien personeels- en bedrijfsnieuws vaak eerder en gedetailleerder dan algemene media.
   - **Opportunity ≠ content**: elk signaal wordt gededupliceerd, gefilterd tegen het
     Bedrijfsprofiel (`/instellingen`) en pas dan AI-beoordeeld -- niet elk signaal wordt een
     Opportunity. Score 0-100 met transparante deelscores, "why now", urgency (evergreen/normaal/
