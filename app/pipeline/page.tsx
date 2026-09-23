@@ -286,20 +286,20 @@ export default function Pipeline() {
             <TabsTrigger value="campaign_created" className="h-11 px-0 text-[#7891a2] data-[state=active]:text-white after:bg-[#35b7df]">Omgezet naar campagne ({grouped.campaign_created.length})</TabsTrigger>
             <TabsTrigger value="dismissed" className="h-11 px-0 text-[#7891a2] data-[state=active]:text-white after:bg-[#35b7df]">Genegeerd ({grouped.dismissed.length})</TabsTrigger>
           </TabsList>
-          <TabsContent value="new" className="space-y-4">
-            {grouped.new.length === 0 && <p className="py-12 text-center text-sm text-[#7f97a8]">Geen nieuwe vacatures. Klik op &quot;Ververs nu&quot; om de sites opnieuw te controleren.</p>}
+          <TabsContent value="new" className="grid gap-4 lg:grid-cols-2">
+            {grouped.new.length === 0 && <p className="py-12 text-center text-sm text-[#7f97a8] lg:col-span-2">Geen nieuwe vacatures. Klik op &quot;Ververs nu&quot; om de sites opnieuw te controleren.</p>}
             {grouped.new.map((vacancy) => (
               <VacancyCard key={vacancy.id} vacancy={vacancy} onDismiss={(id) => updateStatus(id, "dismissed")} onRestore={(id) => updateStatus(id, "new")} onCampaignCreated={handleCampaignCreated} />
             ))}
           </TabsContent>
-          <TabsContent value="campaign_created" className="space-y-4">
-            {grouped.campaign_created.length === 0 && <p className="py-12 text-center text-sm text-[#7f97a8]">Nog geen vacatures omgezet naar een campagne.</p>}
+          <TabsContent value="campaign_created" className="grid gap-4 lg:grid-cols-2">
+            {grouped.campaign_created.length === 0 && <p className="py-12 text-center text-sm text-[#7f97a8] lg:col-span-2">Nog geen vacatures omgezet naar een campagne.</p>}
             {grouped.campaign_created.map((vacancy) => (
               <VacancyCard key={vacancy.id} vacancy={vacancy} onDismiss={(id) => updateStatus(id, "dismissed")} onRestore={(id) => updateStatus(id, "new")} onCampaignCreated={handleCampaignCreated} />
             ))}
           </TabsContent>
-          <TabsContent value="dismissed" className="space-y-4">
-            {grouped.dismissed.length === 0 && <p className="py-12 text-center text-sm text-[#7f97a8]">Niets genegeerd.</p>}
+          <TabsContent value="dismissed" className="grid gap-4 lg:grid-cols-2">
+            {grouped.dismissed.length === 0 && <p className="py-12 text-center text-sm text-[#7f97a8] lg:col-span-2">Niets genegeerd.</p>}
             {grouped.dismissed.map((vacancy) => (
               <VacancyCard key={vacancy.id} vacancy={vacancy} onDismiss={(id) => updateStatus(id, "dismissed")} onRestore={(id) => updateStatus(id, "new")} onCampaignCreated={handleCampaignCreated} />
             ))}

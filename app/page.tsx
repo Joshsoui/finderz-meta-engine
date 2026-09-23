@@ -465,6 +465,65 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
   const [campaigns, setCampaigns] = useState<AdManagerCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<"all" | "active">("active");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [budgetDraft, setBudgetDraft] = useState("");
+  const [isSavingBudget, setIsSavingBudget] = useState(false);
+
+  // Pause/resume and dagbudget hit Meta directly by campaign id (see
+  // app/api/meta/campaigns/[metaCampaignId]) -- no local `campaigns` row
+  // needed, so every campaign in the ad account is controllable here exactly
+  // like in Ads Manager, not just the ones "Importeer" has adopted.
+  async function toggleStatus(campaign: AdManagerCampaign) {
+    const nextStatus = campaign.effectiveStatus === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    setTogglingId(campaign.id);
+    try {
+      const response = await fetch(`/api/meta/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Campagnestatus kon niet worden gewijzigd.");
+      setCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, status: nextStatus, effectiveStatus: nextStatus } : item)));
+      toast.success(nextStatus === "PAUSED" ? "Campagne gepauzeerd" : "Campagne hervat");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Campagnestatus kon niet worden gewijzigd.");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  function startEditingBudget(campaign: AdManagerCampaign) {
+    setEditingBudgetId(campaign.id);
+    setBudgetDraft(campaign.dailyBudgetCents !== undefined ? String(campaign.dailyBudgetCents / 100).replace(".", ",") : "");
+  }
+
+  async function saveBudget(campaign: AdManagerCampaign) {
+    const amount = Number(budgetDraft.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Vul een geldig dagbudget in.");
+      return;
+    }
+    const dailyBudgetCents = Math.round(amount * 100);
+    setIsSavingBudget(true);
+    try {
+      const response = await fetch(`/api/meta/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyBudgetCents }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Dagbudget kon niet worden aangepast.");
+      setCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, dailyBudgetCents } : item)));
+      setEditingBudgetId(null);
+      toast.success("Dagbudget aangepast");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Dagbudget kon niet worden aangepast.");
+    } finally {
+      setIsSavingBudget(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -501,7 +560,7 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
         <div>
           <div className="eyebrow"><Megaphone className="size-3.5" />Rechtstreeks uit Meta</div>
           <h2>Campagnes in Ads Manager</h2>
-          <p className="mt-1 text-xs text-[#607b8d]">Alles wat er in het hele advertentieaccount staat, óók wat niet via dit platform is gemaakt of wordt beheerd.</p>
+          <p className="mt-1 text-xs text-[#607b8d]">Alles wat er in het hele advertentieaccount staat, óók wat niet via dit platform is gemaakt of wordt beheerd. Pauzeren, hervatten en dagbudget aanpassen werkt direct, zonder importeren -- &quot;Importeer&quot; is alleen nodig voor de automatiseringsregels en creative-tools van dit platform.</p>
         </div>
         {connected && sorted.length > 0 && (
           <div className="format-switch shrink-0">
@@ -522,17 +581,47 @@ function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<st
         <div className="max-h-[26rem] divide-y divide-white/8 overflow-y-auto scrollbar-thin">
           {filtered.map((campaign) => {
             const stoplicht = AD_MANAGER_STATUS[campaign.effectiveStatus] ?? { label: campaign.effectiveStatus, statusClass: "status-attention" };
+            const canToggle = campaign.effectiveStatus === "ACTIVE" || campaign.effectiveStatus === "PAUSED";
+            const imported = importedIds.has(campaign.id);
             return (
               <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={campaign.id}>
                 <div className="flex min-w-0 items-center gap-3">
                   <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
                   <span className="truncate text-sm font-medium text-white">{campaign.name}</span>
                 </div>
-                <div className="flex shrink-0 items-center gap-5 text-right text-sm">
+                <div className="flex shrink-0 flex-wrap items-center gap-5 text-right text-sm">
                   <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="text-white">{euro.format(campaign.spend)}</strong></div>
-                  <div><span className="block text-xs text-[#607b8d]">Dagbudget</span><strong className="text-white">{campaign.dailyBudgetCents !== undefined ? euro.format(campaign.dailyBudgetCents / 100) : "—"}</strong></div>
+                  <div className="text-left">
+                    <span className="block text-xs text-[#607b8d]">Dagbudget</span>
+                    {editingBudgetId === campaign.id ? (
+                      <div className="daily-spend-edit">
+                        <span className="daily-spend-prefix">€</span>
+                        <input
+                          autoFocus
+                          className="daily-spend-input"
+                          inputMode="decimal"
+                          value={budgetDraft}
+                          onChange={(event) => setBudgetDraft(event.target.value)}
+                          onKeyDown={(event) => event.key === "Enter" && void saveBudget(campaign)}
+                          placeholder="0"
+                        />
+                        <button className="primary-button" onClick={() => void saveBudget(campaign)} disabled={isSavingBudget}>{isSavingBudget ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}</button>
+                        <button className="secondary-button" onClick={() => setEditingBudgetId(null)}>Annuleren</button>
+                      </div>
+                    ) : (
+                      <button className="mt-0.5 flex items-center gap-1 text-sm font-semibold text-white hover:text-[#5bc0df]" onClick={() => startEditingBudget(campaign)}>
+                        {campaign.dailyBudgetCents !== undefined ? euro.format(campaign.dailyBudgetCents / 100) : "—"}<Pencil className="size-3 text-[#607b8d]" />
+                      </button>
+                    )}
+                  </div>
                   <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="text-white">{campaign.leads}</strong></div>
-                  {importedIds.has(campaign.id) ? (
+                  {canToggle && (
+                    <button className="secondary-button" onClick={() => void toggleStatus(campaign)} disabled={togglingId === campaign.id}>
+                      {togglingId === campaign.id ? <LoaderCircle className="size-4 animate-spin" /> : campaign.effectiveStatus === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
+                      {campaign.effectiveStatus === "ACTIVE" ? "Pauzeer" : "Hervat"}
+                    </button>
+                  )}
+                  {imported ? (
                     <span className="rule-pill">Overgenomen</span>
                   ) : (
                     <button
@@ -1561,18 +1650,7 @@ export default function Home() {
             />
           )}
 
-          <MarketingSpendCard key={spendVersion} isMetaAutomatic={metaStatus.mode === "connected"} platformTotalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
-
-          <TodaySpendByCampaignCard key={"breakdown-" + spendVersion} />
-
-          <AdManagerCampaignsCard importedIds={importedMetaCampaignIds} onImport={setImportCandidate} />
-
-          <IndeedSpendCard onSpendSaved={() => setSpendVersion((version) => version + 1)} />
-
-          <PendingActionsCard />
-
-          <PortfolioBudgetCard />
-
+          {/* KPI-samenvatting bovenaan -- snelle stand in één oogopslag, vóór alle detailpanelen eronder. */}
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
               { label: "Actieve campagnes", value: String(campaigns.filter((campaign) => campaign.status === "live").length), sub: campaigns.length + " campagnes totaal", icon: Megaphone, tone: "blue" },
@@ -1586,6 +1664,22 @@ export default function Home() {
               </article>
             ))}
           </section>
+
+          <MarketingSpendCard key={spendVersion} isMetaAutomatic={metaStatus.mode === "connected"} platformTotalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
+
+          {/* Beide kaarten laten zien "wat gebeurt er in Meta" op verschillend detailniveau -- naast elkaar i.p.v. twee keer een volle-breedte blok, ook als beide nog hun placeholder tonen. */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <TodaySpendByCampaignCard key={"breakdown-" + spendVersion} />
+            <AdManagerCampaignsCard importedIds={importedMetaCampaignIds} onImport={setImportCandidate} />
+          </div>
+
+          <IndeedSpendCard onSpendSaved={() => setSpendVersion((version) => version + 1)} />
+
+          {/* Beide zijn compacte statuskaarten (acties/grens) -- naast elkaar in plaats van twee volle-breedte blokken onder elkaar. */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <PendingActionsCard />
+            <PortfolioBudgetCard />
+          </div>
 
           <section className="panel p-5">
             <div className="flex items-start justify-between gap-4">
