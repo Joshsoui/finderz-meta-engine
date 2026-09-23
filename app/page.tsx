@@ -447,7 +447,7 @@ function TrendChart({ history }: { history: HistoryPoint[] }) {
   );
 }
 
-type AdManagerCampaign = { id: string; name: string; status: string; effectiveStatus: string; spend: number; leads: number; dailyBudgetCents?: number; lifetimeBudgetCents?: number };
+type AdManagerCampaign = { id: string; name: string; status: string; effectiveStatus: string; spend: number; leads: number; impressions?: number; clicks?: number; dailyBudgetCents?: number; lifetimeBudgetCents?: number };
 
 const AD_MANAGER_STATUS: Record<string, { label: string; statusClass: string }> = {
   ACTIVE: { label: "Actief", statusClass: "status-good" },
@@ -459,194 +459,6 @@ const AD_MANAGER_STATUS: Record<string, { label: string; statusClass: string }> 
   WITH_ISSUES: { label: "Heeft een probleem", statusClass: "status-attention" },
   IN_PROCESS: { label: "Wordt verwerkt", statusClass: "status-attention" },
 };
-
-function AdManagerCampaignsCard({ importedIds, onImport }: { importedIds: Set<string>; onImport: (candidate: ImportCandidate) => void }) {
-  const [connected, setConnected] = useState(false);
-  const [campaigns, setCampaigns] = useState<AdManagerCampaign[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active">("active");
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
-  const [budgetDraft, setBudgetDraft] = useState("");
-  const [isSavingBudget, setIsSavingBudget] = useState(false);
-
-  // Pause/resume and dagbudget hit Meta directly by campaign id (see
-  // app/api/meta/campaigns/[metaCampaignId]) -- no local `campaigns` row
-  // needed, so every campaign in the ad account is controllable here exactly
-  // like in Ads Manager, not just the ones "Importeer" has adopted.
-  async function toggleStatus(campaign: AdManagerCampaign) {
-    const nextStatus = campaign.effectiveStatus === "ACTIVE" ? "PAUSED" : "ACTIVE";
-    setTogglingId(campaign.id);
-    try {
-      const response = await fetch(`/api/meta/campaigns/${campaign.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Campagnestatus kon niet worden gewijzigd.");
-      setCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, status: nextStatus, effectiveStatus: nextStatus } : item)));
-      toast.success(nextStatus === "PAUSED" ? "Campagne gepauzeerd" : "Campagne hervat");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Campagnestatus kon niet worden gewijzigd.");
-    } finally {
-      setTogglingId(null);
-    }
-  }
-
-  function startEditingBudget(campaign: AdManagerCampaign) {
-    setEditingBudgetId(campaign.id);
-    setBudgetDraft(campaign.dailyBudgetCents !== undefined ? String(campaign.dailyBudgetCents / 100).replace(".", ",") : "");
-  }
-
-  async function saveBudget(campaign: AdManagerCampaign) {
-    const amount = Number(budgetDraft.replace(",", "."));
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Vul een geldig dagbudget in.");
-      return;
-    }
-    const dailyBudgetCents = Math.round(amount * 100);
-    setIsSavingBudget(true);
-    try {
-      const response = await fetch(`/api/meta/campaigns/${campaign.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dailyBudgetCents }),
-      });
-      const payload = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Dagbudget kon niet worden aangepast.");
-      setCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, dailyBudgetCents } : item)));
-      setEditingBudgetId(null);
-      toast.success("Dagbudget aangepast");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Dagbudget kon niet worden aangepast.");
-    } finally {
-      setIsSavingBudget(false);
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await fetch("/api/meta/all-campaigns");
-        const payload = await response.json() as { connected?: boolean; campaigns?: AdManagerCampaign[]; error?: string };
-        if (response.ok && !cancelled) {
-          setConnected(Boolean(payload.connected));
-          setCampaigns(payload.campaigns ?? []);
-        }
-      } catch {
-        // The dashboard still works without this panel; fail quietly.
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const sorted = campaigns.slice().sort((a, b) => {
-    if (a.effectiveStatus === "ACTIVE" && b.effectiveStatus !== "ACTIVE") return -1;
-    if (b.effectiveStatus === "ACTIVE" && a.effectiveStatus !== "ACTIVE") return 1;
-    return b.spend - a.spend;
-  });
-  const activeCount = sorted.filter((campaign) => campaign.effectiveStatus === "ACTIVE").length;
-  const filtered = statusFilter === "active" ? sorted.filter((campaign) => campaign.effectiveStatus === "ACTIVE") : sorted;
-
-  return (
-    <article className="panel overflow-hidden">
-      <div className="panel-header">
-        <div>
-          <div className="eyebrow"><Megaphone className="size-3.5" />Rechtstreeks uit Meta</div>
-          <h2>Campagnes in Ads Manager</h2>
-          <p className="mt-1 text-xs text-[#607b8d]">Alles wat er in het hele advertentieaccount staat, óók wat niet via dit platform is gemaakt of wordt beheerd. Pauzeren, hervatten en dagbudget aanpassen werkt direct, zonder importeren -- &quot;Importeer&quot; is alleen nodig voor de automatiseringsregels en creative-tools van dit platform.</p>
-        </div>
-        {connected && sorted.length > 0 && (
-          <div className="format-switch shrink-0">
-            <button className={statusFilter === "all" ? "active" : ""} onClick={() => setStatusFilter("all")}>Alle<span>{sorted.length}</span></button>
-            <button className={statusFilter === "active" ? "active" : ""} onClick={() => setStatusFilter("active")}>Actief<span>{activeCount}</span></button>
-          </div>
-        )}
-      </div>
-      {!connected ? (
-        <p className="px-5 py-10 text-sm text-[#7f97a8]">Beschikbaar zodra Meta gekoppeld is.</p>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center py-16 text-[#91aabb]"><LoaderCircle className="size-6 animate-spin" /></div>
-      ) : sorted.length === 0 ? (
-        <p className="px-5 py-10 text-sm text-[#7f97a8]">Geen campagnes gevonden in dit advertentieaccount.</p>
-      ) : filtered.length === 0 ? (
-        <p className="px-5 py-10 text-sm text-[#7f97a8]">Geen actieve campagnes.</p>
-      ) : (
-        <div className="max-h-[26rem] divide-y divide-white/8 overflow-y-auto scrollbar-thin">
-          {filtered.map((campaign) => {
-            const stoplicht = AD_MANAGER_STATUS[campaign.effectiveStatus] ?? { label: campaign.effectiveStatus, statusClass: "status-attention" };
-            const canToggle = campaign.effectiveStatus === "ACTIVE" || campaign.effectiveStatus === "PAUSED";
-            const imported = importedIds.has(campaign.id);
-            return (
-              <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={campaign.id}>
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
-                  <span className="truncate text-sm font-medium text-white">{campaign.name}</span>
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-5 text-right text-sm">
-                  <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="text-white">{euro.format(campaign.spend)}</strong></div>
-                  <div className="text-left">
-                    <span className="block text-xs text-[#607b8d]">Dagbudget</span>
-                    {editingBudgetId === campaign.id ? (
-                      <div className="daily-spend-edit">
-                        <span className="daily-spend-prefix">€</span>
-                        <input
-                          autoFocus
-                          className="daily-spend-input"
-                          inputMode="decimal"
-                          value={budgetDraft}
-                          onChange={(event) => setBudgetDraft(event.target.value)}
-                          onKeyDown={(event) => event.key === "Enter" && void saveBudget(campaign)}
-                          placeholder="0"
-                        />
-                        <button className="primary-button" onClick={() => void saveBudget(campaign)} disabled={isSavingBudget}>{isSavingBudget ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}</button>
-                        <button className="secondary-button" onClick={() => setEditingBudgetId(null)}>Annuleren</button>
-                      </div>
-                    ) : (
-                      <button className="mt-0.5 flex items-center gap-1 text-sm font-semibold text-white hover:text-[#5bc0df]" onClick={() => startEditingBudget(campaign)}>
-                        {campaign.dailyBudgetCents !== undefined ? euro.format(campaign.dailyBudgetCents / 100) : "—"}<Pencil className="size-3 text-[#607b8d]" />
-                      </button>
-                    )}
-                  </div>
-                  <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="text-white">{campaign.leads}</strong></div>
-                  {canToggle && (
-                    <button className="secondary-button" onClick={() => void toggleStatus(campaign)} disabled={togglingId === campaign.id}>
-                      {togglingId === campaign.id ? <LoaderCircle className="size-4 animate-spin" /> : campaign.effectiveStatus === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
-                      {campaign.effectiveStatus === "ACTIVE" ? "Pauzeer" : "Hervat"}
-                    </button>
-                  )}
-                  {imported ? (
-                    <span className="rule-pill">Overgenomen</span>
-                  ) : (
-                    <button
-                      className="secondary-button"
-                      onClick={() => onImport({
-                        metaCampaignId: campaign.id,
-                        name: campaign.name,
-                        effectiveStatus: campaign.effectiveStatus,
-                        spendCents: Math.round(campaign.spend * 100),
-                        dailyBudgetCents: campaign.dailyBudgetCents,
-                        leads: campaign.leads,
-                      })}
-                    >
-                      Importeer
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </article>
-  );
-}
 
 type MarketingSpendSummary = {
   today: { meta: number; indeed: number; total: number };
@@ -1212,9 +1024,25 @@ export default function Home() {
   // of showing a stale total from before that edit.
   const [spendVersion, setSpendVersion] = useState(0);
   const [importCandidate, setImportCandidate] = useState<ImportCandidate | null>(null);
+  // Every other campaign in the ad account, alongside the ones this platform
+  // tracks -- the "Campagnes" list and the top KPI tiles show the whole
+  // account as one list, matching what Ads Manager itself would show,
+  // instead of undercounting to just what's been "Importeer"-d.
+  const [metaAccountCampaigns, setMetaAccountCampaigns] = useState<AdManagerCampaign[]>([]);
+  const [metaTogglingId, setMetaTogglingId] = useState<string | null>(null);
+  const [metaEditingBudgetId, setMetaEditingBudgetId] = useState<string | null>(null);
+  const [metaBudgetDraft, setMetaBudgetDraft] = useState("");
+  const [isSavingMetaBudget, setIsSavingMetaBudget] = useState(false);
   const importedMetaCampaignIds = useMemo(
     () => new Set(campaigns.map((campaign) => campaign.metaCampaignId).filter((id): id is string => Boolean(id))),
     [campaigns],
+  );
+  // Campaigns Meta knows about that this platform doesn't manage yet (no fee,
+  // no automation) -- shown in the same list with direct pause/budget
+  // control, never a separate card, per "geen onderscheid meer".
+  const metaOnlyCampaigns = useMemo(
+    () => metaAccountCampaigns.filter((campaign) => !importedMetaCampaignIds.has(campaign.id)),
+    [metaAccountCampaigns, importedMetaCampaignIds],
   );
   const selected = campaigns.find((campaign) => campaign.id === selectedId);
   const totals = useMemo(() => {
@@ -1227,19 +1055,93 @@ export default function Home() {
     const profit = fee - spend;
     const confirmed = campaigns.filter((campaign) => campaign.status === "completed");
     const confirmedProfit = confirmed.reduce((sum, campaign) => sum + (campaign.fee - campaign.spend), 0);
+    // Account-wide figures (for the top KPI tiles + campaign-list count) mix
+    // in every Meta campaign, not only the fee-tracked ones -- but fee/winst
+    // stay local-only above, since "profit" only means something relative to
+    // a recruitment fee this platform actually knows.
+    const accountSpend = spend + metaOnlyCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
+    const accountLeads = leads + metaOnlyCampaigns.reduce((sum, campaign) => sum + campaign.leads, 0);
+    const accountClicks = clicks + metaOnlyCampaigns.reduce((sum, campaign) => sum + (campaign.clicks ?? 0), 0);
+    const accountImpressions = impressions + metaOnlyCampaigns.reduce((sum, campaign) => sum + (campaign.impressions ?? 0), 0);
+    const activeCount = campaigns.filter((campaign) => campaign.status === "live").length
+      + metaOnlyCampaigns.filter((campaign) => campaign.effectiveStatus === "ACTIVE").length;
     return {
       spend, leads, fee, maxBudget, profit, confirmedProfit,
       confirmedCount: confirmed.length,
       cpl: leads ? spend / leads : 0,
       ctr: impressions ? (clicks / impressions) * 100 : 0,
       budgetUsed: maxBudget ? Math.min((spend / maxBudget) * 100, 100) : 0,
+      activeCount,
+      accountSpend,
+      accountLeads,
+      accountCpl: accountLeads ? accountSpend / accountLeads : 0,
+      accountCtr: accountImpressions ? (accountClicks / accountImpressions) * 100 : 0,
     };
-  }, [campaigns]);
+  }, [campaigns, metaOnlyCampaigns]);
 
-  const tableActiveCount = campaigns.filter((campaign) => campaign.status === "live").length;
-  const filteredTableCampaigns = tableStatusFilter === "active"
-    ? campaigns.filter((campaign) => campaign.status === "live")
-    : campaigns;
+  type TableRow = { kind: "platform"; campaign: Campaign } | { kind: "meta_only"; campaign: AdManagerCampaign };
+  const combinedRows = useMemo<TableRow[]>(() => [
+    ...campaigns.map((campaign): TableRow => ({ kind: "platform", campaign })),
+    ...metaOnlyCampaigns.map((campaign): TableRow => ({ kind: "meta_only", campaign })),
+  ], [campaigns, metaOnlyCampaigns]);
+  const isRowActive = (row: TableRow) => (row.kind === "platform" ? row.campaign.status === "live" : row.campaign.effectiveStatus === "ACTIVE");
+  const tableActiveCount = totals.activeCount;
+  const filteredTableRows = tableStatusFilter === "active" ? combinedRows.filter(isRowActive) : combinedRows;
+
+  // Pause/resume and dagbudget for a not-yet-imported campaign hit Meta
+  // directly by campaign id (see app/api/meta/campaigns/[metaCampaignId]) --
+  // no local `campaigns` row needed, so it's controllable right in this same
+  // list, exactly like the imported ones just below it.
+  async function toggleMetaStatus(campaign: AdManagerCampaign) {
+    const nextStatus = campaign.effectiveStatus === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    setMetaTogglingId(campaign.id);
+    try {
+      const response = await fetch(`/api/meta/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Campagnestatus kon niet worden gewijzigd.");
+      setMetaAccountCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, status: nextStatus, effectiveStatus: nextStatus } : item)));
+      toast.success(nextStatus === "PAUSED" ? "Campagne gepauzeerd" : "Campagne hervat");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Campagnestatus kon niet worden gewijzigd.");
+    } finally {
+      setMetaTogglingId(null);
+    }
+  }
+
+  function startEditingMetaBudget(campaign: AdManagerCampaign) {
+    setMetaEditingBudgetId(campaign.id);
+    setMetaBudgetDraft(campaign.dailyBudgetCents !== undefined ? String(campaign.dailyBudgetCents / 100).replace(".", ",") : "");
+  }
+
+  async function saveMetaBudget(campaign: AdManagerCampaign) {
+    const amount = Number(metaBudgetDraft.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Vul een geldig dagbudget in.");
+      return;
+    }
+    const dailyBudgetCents = Math.round(amount * 100);
+    setIsSavingMetaBudget(true);
+    try {
+      const response = await fetch(`/api/meta/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyBudgetCents }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Dagbudget kon niet worden aangepast.");
+      setMetaAccountCampaigns((current) => current.map((item) => (item.id === campaign.id ? { ...item, dailyBudgetCents } : item)));
+      setMetaEditingBudgetId(null);
+      toast.success("Dagbudget aangepast");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Dagbudget kon niet worden aangepast.");
+    } finally {
+      setIsSavingMetaBudget(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1256,6 +1158,22 @@ export default function Home() {
         if (!cancelled) toast.error(error instanceof Error ? error.message : "Campagnes konden niet worden geladen.");
       } finally {
         if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/meta/all-campaigns");
+        const payload = await response.json() as { connected?: boolean; campaigns?: AdManagerCampaign[]; error?: string };
+        if (response.ok && !cancelled) setMetaAccountCampaigns(payload.campaigns ?? []);
+      } catch {
+        // The unified list still works with just the platform-managed campaigns; fail quietly.
       }
     })();
     return () => {
@@ -1650,13 +1568,13 @@ export default function Home() {
             />
           )}
 
-          {/* KPI-samenvatting bovenaan -- snelle stand in één oogopslag, vóór alle detailpanelen eronder. */}
+          {/* KPI-samenvatting bovenaan -- het hele advertentieaccount, niet alleen wat via dit platform beheerd wordt (zie ook de campagnelijst verderop). */}
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Actieve campagnes", value: String(campaigns.filter((campaign) => campaign.status === "live").length), sub: campaigns.length + " campagnes totaal", icon: Megaphone, tone: "blue" },
-              { label: "Totaal uitgegeven", value: euro.format(totals.spend), sub: "over alle campagnes", icon: CircleDollarSign, tone: "green" },
-              { label: "Nieuwe leads", value: String(totals.leads), sub: "over alle campagnes", icon: Users, tone: "amber" },
-              { label: "Gem. kosten per lead", value: euro.format(totals.cpl), sub: totals.ctr.toFixed(2).replace(".", ",") + "% klikratio", icon: Target, tone: "purple" },
+              { label: "Actieve campagnes", value: String(totals.activeCount), sub: combinedRows.length + " campagnes totaal", icon: Megaphone, tone: "blue" },
+              { label: "Totaal uitgegeven", value: euro.format(totals.accountSpend), sub: "over alle campagnes", icon: CircleDollarSign, tone: "green" },
+              { label: "Nieuwe leads", value: String(totals.accountLeads), sub: "over alle campagnes", icon: Users, tone: "amber" },
+              { label: "Gem. kosten per lead", value: euro.format(totals.accountCpl), sub: totals.accountCtr.toFixed(2).replace(".", ",") + "% klikratio", icon: Target, tone: "purple" },
             ].map((metric) => (
               <article className="metric-card" key={metric.label}>
                 <div className="flex items-start justify-between"><div><p className="text-sm font-medium text-[#7f97a8]">{metric.label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-white">{metric.value}</p></div><div className={"metric-icon metric-icon-" + metric.tone}><metric.icon className="size-[18px]" /></div></div>
@@ -1667,11 +1585,7 @@ export default function Home() {
 
           <MarketingSpendCard key={spendVersion} isMetaAutomatic={metaStatus.mode === "connected"} platformTotalSpend={totals.spend} onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
-          {/* Beide kaarten laten zien "wat gebeurt er in Meta" op verschillend detailniveau -- naast elkaar i.p.v. twee keer een volle-breedte blok, ook als beide nog hun placeholder tonen. */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <TodaySpendByCampaignCard key={"breakdown-" + spendVersion} />
-            <AdManagerCampaignsCard importedIds={importedMetaCampaignIds} onImport={setImportCandidate} />
-          </div>
+          <TodaySpendByCampaignCard key={"breakdown-" + spendVersion} />
 
           <IndeedSpendCard onSpendSaved={() => setSpendVersion((version) => version + 1)} />
 
@@ -1710,7 +1624,7 @@ export default function Home() {
             </div>
           </section>
 
-          {!selected ? (
+          {combinedRows.length === 0 ? (
             <article className="panel flex flex-col items-center justify-center gap-4 px-6 py-16 text-center text-white">
               <FinderzMark />
               <h2 className="text-lg font-semibold">Nog geen campagnes</h2>
@@ -1726,16 +1640,79 @@ export default function Home() {
                   <div className="flex shrink-0 items-center gap-3">
                     <div className="format-switch">
                       <button className={tableStatusFilter === "active" ? "active" : ""} onClick={() => setTableStatusFilter("active")}>Actief<span>{tableActiveCount}</span></button>
-                      <button className={tableStatusFilter === "all" ? "active" : ""} onClick={() => setTableStatusFilter("all")}>Alle<span>{campaigns.length}</span></button>
+                      <button className={tableStatusFilter === "all" ? "active" : ""} onClick={() => setTableStatusFilter("all")}>Alle<span>{combinedRows.length}</span></button>
                     </div>
                     <div className="relative hidden sm:block"><Search className="absolute left-3 top-2.5 size-4 text-[#607b8d]" /><input className="h-9 w-56 rounded-lg border border-white/10 bg-[#0d2b45] pl-9 pr-3 text-sm text-white outline-none placeholder:text-[#506a7c] focus:border-[#278cb0]" placeholder="Zoek campagne" /></div>
                   </div>
                 </div>
-                {filteredTableCampaigns.length === 0 ? (
+                {filteredTableRows.length === 0 ? (
                   <p className="px-5 py-10 text-center text-sm text-[#7f97a8]">Geen actieve campagnes.</p>
                 ) : (
                   <div className="divide-y divide-white/8">
-                    {filteredTableCampaigns.map((campaign) => {
+                    {filteredTableRows.map((row) => {
+                      if (row.kind === "meta_only") {
+                        const campaign = row.campaign;
+                        const stoplicht = AD_MANAGER_STATUS[campaign.effectiveStatus] ?? { label: campaign.effectiveStatus, statusClass: "status-attention" };
+                        const canToggle = campaign.effectiveStatus === "ACTIVE" || campaign.effectiveStatus === "PAUSED";
+                        return (
+                          <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5" key={"meta-" + campaign.id}>
+                            <div className="min-w-0 max-w-full flex-1 basis-56">
+                              <span className={"status " + stoplicht.statusClass}><span />{stoplicht.label}</span>
+                              <div className="mt-1 truncate font-semibold text-white">{campaign.name}</div>
+                              <div className="text-xs text-[#6f8798]">Rechtstreeks uit Meta -- geen fee ingesteld</div>
+                            </div>
+                            <div className="flex shrink-0 flex-wrap items-center gap-5 text-right text-sm">
+                              <div><span className="block text-xs text-[#607b8d]">Uitgegeven</span><strong className="font-medium text-[#c4d1d9]">{euro.format(campaign.spend)}</strong></div>
+                              <div><span className="block text-xs text-[#607b8d]">Leads</span><strong className="font-medium text-[#c4d1d9]">{campaign.leads}</strong></div>
+                              <div className="text-left">
+                                <span className="block text-xs text-[#607b8d]">Dagbudget</span>
+                                {metaEditingBudgetId === campaign.id ? (
+                                  <div className="mt-0.5 flex items-center gap-1">
+                                    <span className="text-[11px] text-[#6f8798]">€</span>
+                                    <input
+                                      autoFocus
+                                      className="w-14 rounded-md border border-[#2f9fc4] bg-[#0d2d45] px-1.5 py-0.5 text-xs text-white outline-none"
+                                      inputMode="decimal"
+                                      value={metaBudgetDraft}
+                                      onChange={(event) => setMetaBudgetDraft(event.target.value)}
+                                      onKeyDown={(event) => event.key === "Enter" && void saveMetaBudget(campaign)}
+                                    />
+                                    <button className="text-[#5bc0df]" onClick={() => void saveMetaBudget(campaign)} disabled={isSavingMetaBudget}>
+                                      {isSavingMetaBudget ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                                    </button>
+                                    <button className="text-[#6f8798]" onClick={() => setMetaEditingBudgetId(null)}>×</button>
+                                  </div>
+                                ) : (
+                                  <button className="mt-0.5 flex items-center gap-1 font-medium text-white hover:text-[#5bc0df]" onClick={() => startEditingMetaBudget(campaign)}>
+                                    {campaign.dailyBudgetCents !== undefined ? euro.format(campaign.dailyBudgetCents / 100) : "—"}<Pencil className="size-3 text-[#607b8d]" />
+                                  </button>
+                                )}
+                              </div>
+                              {canToggle && (
+                                <button className="secondary-button" onClick={() => void toggleMetaStatus(campaign)} disabled={metaTogglingId === campaign.id}>
+                                  {metaTogglingId === campaign.id ? <LoaderCircle className="size-4 animate-spin" /> : campaign.effectiveStatus === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
+                                  {campaign.effectiveStatus === "ACTIVE" ? "Pauzeer" : "Hervat"}
+                                </button>
+                              )}
+                              <button
+                                className="secondary-button"
+                                onClick={() => setImportCandidate({
+                                  metaCampaignId: campaign.id,
+                                  name: campaign.name,
+                                  effectiveStatus: campaign.effectiveStatus,
+                                  spendCents: Math.round(campaign.spend * 100),
+                                  dailyBudgetCents: campaign.dailyBudgetCents,
+                                  leads: campaign.leads,
+                                })}
+                              >
+                                Importeer
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const campaign = row.campaign;
                       const rowCpl = campaign.leads ? campaign.spend / campaign.leads : 0;
                       const used = campaign.maxBudget ? Math.round((campaign.spend / campaign.maxBudget) * 100) : 0;
                       const canEditBudget = campaign.status === "live" || campaign.status === "attention";
@@ -1743,7 +1720,7 @@ export default function Home() {
                       return (
                         <div
                           key={campaign.id}
-                          className={"flex flex-wrap items-center justify-between gap-4 px-5 py-3.5 cursor-pointer " + (campaign.id === selected.id ? "bg-[#133d58]" : "hover:bg-[#14405c]")}
+                          className={"flex flex-wrap items-center justify-between gap-4 px-5 py-3.5 cursor-pointer " + (campaign.id === selected?.id ? "bg-[#133d58]" : "hover:bg-[#14405c]")}
                           onClick={() => setSelectedId(campaign.id)}
                         >
                           <div className="min-w-0 max-w-full flex-1 basis-56">
@@ -1793,6 +1770,11 @@ export default function Home() {
                 )}
               </article>
 
+              {!selected ? (
+                <article className="panel flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+                  <p className="text-sm text-[#91aabb]">Selecteer een campagne die via dit platform wordt beheerd voor prestatie-, creative- en automatiseringsdetails, of klik &quot;Importeer&quot; bij een campagne hierboven.</p>
+                </article>
+              ) : (
               <article className="panel">
                 <div className="panel-header">
                   <div><div className="eyebrow"><Gauge className="size-3.5" />Geselecteerde campagne</div><h2>{selected.title}</h2><p className="mt-1 text-sm text-[#6f8798]">{selected.location}</p></div>
@@ -1935,9 +1917,11 @@ export default function Home() {
                   </TabsContent>
                 </Tabs>
               </article>
+              )}
             </div>
 
             <aside className="min-w-0 space-y-6">
+              {selected && (
               <article className="panel p-5">
                 <div className="flex items-start justify-between gap-4"><div><div className="eyebrow"><BrainCircuit className="size-3.5" />Automatische analyse</div><h2 className="mt-2">Aanbevolen actie</h2></div><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f8db7]/15 text-[#5bc0df]"><Zap className="size-5" /></div></div>
                 <div className="mt-5 rounded-xl border border-[#206389] bg-[#13425e] p-4"><p className="text-sm leading-6 text-[#bbced9]">{selected.recommendation}</p></div>
@@ -1965,6 +1949,7 @@ export default function Home() {
                   </button>
                 )}
               </article>
+              )}
 
               <article className="panel p-5">
                 <div className="flex items-center justify-between"><div><div className="eyebrow"><Clock3 className="size-3.5" />24/7 monitoring</div><h2 className="mt-2">Recente acties</h2></div><span className="live-pulse"><span />Live</span></div>

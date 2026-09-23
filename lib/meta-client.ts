@@ -356,6 +356,8 @@ export type MetaAccountCampaign = {
   effectiveStatus: string;
   spend: number;
   leads: number;
+  impressions: number;
+  clicks: number;
   /** The campaign's actual configured daily_budget on Meta (cents), when it has one -- distinct from `spend` (cumulative so far). Undefined if this campaign uses a lifetime budget instead, or has neither set. */
   dailyBudgetCents?: number;
   /** The campaign's actual configured lifetime_budget on Meta (cents), when it uses that instead of a daily budget. */
@@ -384,10 +386,10 @@ export async function fetchAllAccountCampaigns(datePreset: "today" | "maximum" =
       effective_status: string;
       daily_budget?: string;
       lifetime_budget?: string;
-      insights?: { data?: Array<{ spend?: string; actions?: Array<{ action_type: string; value: string }> }> };
+      insights?: { data?: Array<{ spend?: string; impressions?: string; clicks?: string; actions?: Array<{ action_type: string; value: string }> }> };
     }>;
   }>(`/act_${credentials.adAccountId}/campaigns`, credentials.accessToken, {
-    params: { fields: `name,status,effective_status,daily_budget,lifetime_budget,insights.date_preset(${datePreset}){spend,actions}`, limit: 200 },
+    params: { fields: `name,status,effective_status,daily_budget,lifetime_budget,insights.date_preset(${datePreset}){spend,impressions,clicks,actions}`, limit: 200 },
   });
 
   return (result.data ?? []).map((campaign) => {
@@ -400,6 +402,8 @@ export async function fetchAllAccountCampaigns(datePreset: "today" | "maximum" =
       effectiveStatus: campaign.effective_status,
       spend: Number(insightsRow?.spend ?? 0),
       leads: Number(leadAction?.value ?? 0),
+      impressions: Number(insightsRow?.impressions ?? 0),
+      clicks: Number(insightsRow?.clicks ?? 0),
       dailyBudgetCents: campaign.daily_budget !== undefined ? Number(campaign.daily_budget) : undefined,
       lifetimeBudgetCents: campaign.lifetime_budget !== undefined ? Number(campaign.lifetime_budget) : undefined,
     };
