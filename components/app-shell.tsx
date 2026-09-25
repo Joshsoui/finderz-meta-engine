@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
-  BrainCircuit, FileSpreadsheet, ImageIcon, LayoutDashboard, Lightbulb, Megaphone, Radar, Settings2, Users, Zap,
+  BrainCircuit, FileSpreadsheet, ImageIcon, LayoutDashboard, Lightbulb, Megaphone, Microscope, Radar, Settings2, Users, Zap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -13,7 +13,7 @@ import {
 import { useMetaStatus } from "@/lib/use-meta-status";
 import { Toaster, toast } from "sonner";
 
-export type NavKey = "overzicht" | "radar" | "opportunities" | "pipeline" | "creatives" | "leads" | "optimalisaties" | "automatisering" | "rapportage" | "instellingen";
+export type NavKey = "overzicht" | "radar" | "opportunities" | "pipeline" | "creatives" | "leads" | "analyse" | "optimalisaties" | "automatisering" | "rapportage" | "instellingen";
 
 const NAV_ITEMS: Array<{ key: NavKey; label: string; icon: typeof LayoutDashboard; href?: string; badge?: string }> = [
   { key: "overzicht", label: "Overzicht", icon: LayoutDashboard, href: "/" },
@@ -22,6 +22,7 @@ const NAV_ITEMS: Array<{ key: NavKey; label: string; icon: typeof LayoutDashboar
   { key: "pipeline", label: "Pipeline", icon: Megaphone, href: "/pipeline" },
   { key: "creatives", label: "Creatives", icon: ImageIcon, href: "/creatives" },
   { key: "leads", label: "Leads", icon: Users, href: "/leads" },
+  { key: "analyse", label: "Analyse", icon: Microscope, href: "/analyse" },
   { key: "optimalisaties", label: "Optimalisaties", icon: BrainCircuit, href: "/optimalisaties" },
   { key: "automatisering", label: "Automatisering", icon: Zap, href: "/automatisering" },
   { key: "rapportage", label: "Rapportage", icon: FileSpreadsheet, href: "/rapportage" },

@@ -49,6 +49,11 @@ Meta-only recruitment campaign control voor Finderz Keeperz.
     signaal, welke opportunity en welke actie daadwerkelijk resultaat opleverden.
   - Zie `/radar` en `/opportunities`. Architectuur: `lib/radar/`, `lib/opportunity-engine.ts`,
     `lib/action-types.ts`, `lib/opportunity-decay.ts`, `lib/content-engine.ts`, `lib/business-profile.ts`.
+- **Creative Analyst** -- doorzoekt de eigen historische campagnedata (advertentietekst, USP's,
+  spend en kosten per lead) op terugkerende patronen in wat structureel beter (of slechter)
+  scoort, met concrete, herbruikbare tekst als onderbouwing -- nooit alleen de ene campagne met
+  het laagste getal. Handmatig te starten via "Analyseer nu"; vereist minimaal 4 campagnes met
+  genoeg leads voor een betrouwbaar patroon. Zie `/analyse`. Architectuur: `lib/creative-analyst.ts`.
 
 ## API
 

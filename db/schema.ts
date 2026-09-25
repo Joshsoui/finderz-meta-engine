@@ -408,7 +408,7 @@ export const aiUsageLog = sqliteTable(
   "ai_usage_log",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    purpose: text("purpose", { enum: ["opportunity_scoring", "content_generation"] }).notNull(),
+    purpose: text("purpose", { enum: ["opportunity_scoring", "content_generation", "creative_analysis"] }).notNull(),
     model: text("model").notNull(),
     relatedId: text("related_id"), // signalId or opportunityId, depending on purpose
     inputTokens: integer("input_tokens"),
@@ -434,3 +434,40 @@ export const signalProviderState = sqliteTable("signal_provider_state", {
   lastRunInserted: integer("last_run_inserted").notNull().default(0),
   lastError: text("last_error"),
 });
+
+/** Single-row table (id always "global") tracking the last Creative Analyst run -- same pattern as signalProviderState/metaSyncHealth, so "wanneer heeft dit voor het laatst gedraaid" is always answerable even when a run found zero patterns. */
+export const creativeAnalysisState = sqliteTable("creative_analysis_state", {
+  id: text("id").primaryKey(),
+  lastRunAt: text("last_run_at"),
+  lastRunCampaignsAnalyzed: integer("last_run_campaigns_analyzed").notNull().default(0),
+  lastRunPatternsFound: integer("last_run_patterns_found").notNull().default(0),
+  lastRunError: text("last_run_error"),
+});
+
+/**
+ * The Creative Analyst's output: patterns in what historically performs
+ * well (or badly) across this account's own campaign copy, mined from real
+ * spend/lead data rather than a single highest-CPL campaign. `runId` groups
+ * every pattern from one analysis run, so history is kept (the learning
+ * loop this project already keeps elsewhere) while the UI only shows the
+ * latest run's patterns.
+ */
+export const creativeInsights = sqliteTable(
+  "creative_insights",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
+    kind: text("kind", { enum: ["winner", "watchout"] }).notNull(),
+    theme: text("theme").notNull(),
+    description: text("description").notNull(),
+    /** A concrete, reusable snippet or approach grounded in the evidence campaigns' real copy -- never invented. */
+    suggestedReuse: text("suggested_reuse").notNull(),
+    /** JSON array of campaign ids this pattern is actually evidenced by -- always >= 2, enforced in code regardless of what the AI claims. */
+    evidenceCampaignIdsJson: text("evidence_campaign_ids_json").notNull(),
+    avgCplCents: integer("avg_cpl_cents"),
+    portfolioAvgCplCents: integer("portfolio_avg_cpl_cents"),
+    confidence: text("confidence", { enum: ["low", "medium", "high"] }).notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_creative_insights_run").on(table.runId)]
+);
