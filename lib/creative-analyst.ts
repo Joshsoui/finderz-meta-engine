@@ -1,6 +1,9 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { aiUsageLog, campaigns, creativeAnalysisState, creativeInsights, metricSnapshots } from "@/db/schema";
+import {
+  fetchAdCreativeDetails, fetchAllAccountCampaigns, fetchCampaignAds, getMetaCredentials,
+} from "@/lib/meta-client";
 
 /** Below this a campaign's own CPL is still mostly noise -- same confidence-floor reasoning as AD_PERFORMANCE_CONFIDENT_LEADS in app/page.tsx, applied here to which campaigns are even worth feeding into the analysis. */
 const MIN_LEADS_FOR_DATAPOINT = 3;
@@ -26,11 +29,15 @@ export type CreativeDatapoint = {
  * campaigns+metricSnapshots join /api/campaigns uses (leads live in the
  * latest snapshot, not on the campaigns row itself), filtered down to
  * campaigns with enough real spend and leads that their CPL means anything.
+ * Also returns every local campaign's metaCampaignId (regardless of whether
+ * it qualified), so the Meta-only pass below never double-counts a campaign
+ * this platform already has richer local copy for.
  */
-async function getCreativePerformanceDataset(): Promise<CreativeDatapoint[]> {
+async function getLocalPerformanceDataset(): Promise<{ points: CreativeDatapoint[]; trackedMetaCampaignIds: Set<string> }> {
   const db = await getDb();
   const rows = await db.select().from(campaigns).where(inArray(campaigns.status, ["live", "attention", "paused", "completed"]));
-  if (rows.length === 0) return [];
+  const trackedMetaCampaignIds = new Set(rows.map((row) => row.metaCampaignId).filter((id): id is string => Boolean(id)));
+  if (rows.length === 0) return { points: [], trackedMetaCampaignIds };
 
   const campaignIds = rows.map((row) => row.id);
   const latestLeadsByCampaign = new Map<string, number>();
@@ -43,7 +50,7 @@ async function getCreativePerformanceDataset(): Promise<CreativeDatapoint[]> {
     if (!latestLeadsByCampaign.has(snapshot.campaignId)) latestLeadsByCampaign.set(snapshot.campaignId, snapshot.leads);
   }
 
-  return rows
+  const points = rows
     .map((row) => {
       const leads = latestLeadsByCampaign.get(row.id) ?? 0;
       let usps: string[] = [];
@@ -68,6 +75,66 @@ async function getCreativePerformanceDataset(): Promise<CreativeDatapoint[]> {
       };
     })
     .filter((point) => point.spendCents > 0 && point.leads >= MIN_LEADS_FOR_DATAPOINT);
+
+  return { points, trackedMetaCampaignIds };
+}
+
+/**
+ * Campaigns that ran (or are running) directly in Meta Ads Manager, never
+ * created or imported through this platform -- there's no local copy for
+ * these at all, so the ad creative (headline/primary text/description) is
+ * read live from Meta itself, from whichever of the campaign's ads has the
+ * most leads (the one most worth analyzing when a campaign has several
+ * ad variants). Skips gracefully -- never throws -- since this is extra
+ * context on top of the local dataset, not something the analysis should
+ * fail without.
+ */
+async function getMetaOnlyPerformanceDataset(trackedMetaCampaignIds: Set<string>): Promise<CreativeDatapoint[]> {
+  if (!getMetaCredentials()) return [];
+
+  let accountCampaigns;
+  try {
+    accountCampaigns = await fetchAllAccountCampaigns("maximum");
+  } catch {
+    return [];
+  }
+
+  const candidates = accountCampaigns.filter(
+    (campaign) => !trackedMetaCampaignIds.has(campaign.id) && campaign.spend > 0 && campaign.leads >= MIN_LEADS_FOR_DATAPOINT,
+  );
+
+  const points: CreativeDatapoint[] = [];
+  for (const campaign of candidates) {
+    try {
+      const ads = await fetchCampaignAds(campaign.id);
+      const bestAd = ads.slice().sort((a, b) => (b.leads - a.leads) || (b.spend - a.spend))[0];
+      if (!bestAd) continue;
+
+      const details = await fetchAdCreativeDetails(bestAd.id);
+      points.push({
+        campaignId: campaign.id,
+        title: campaign.name,
+        location: "",
+        salary: "",
+        usps: [],
+        headline: details.linkData.name,
+        primaryText: details.linkData.message,
+        descriptionText: details.linkData.description,
+        spendCents: Math.round(campaign.spend * 100),
+        leads: campaign.leads,
+        cplCents: campaign.leads > 0 ? Math.round((campaign.spend * 100) / campaign.leads) : null,
+      });
+    } catch {
+      // One campaign's creative couldn't be read (e.g. an archived/deleted ad) -- skip it, don't fail the whole analysis over it.
+    }
+  }
+  return points;
+}
+
+async function getCreativePerformanceDataset(): Promise<CreativeDatapoint[]> {
+  const { points: localPoints, trackedMetaCampaignIds } = await getLocalPerformanceDataset();
+  const metaOnlyPoints = await getMetaOnlyPerformanceDataset(trackedMetaCampaignIds);
+  return [...localPoints, ...metaOnlyPoints];
 }
 
 type AiPattern = {
@@ -214,6 +281,15 @@ export async function runCreativeAnalysis(): Promise<CreativeAnalysisResult> {
     const confidence: "low" | "medium" | "high" =
       validEvidenceIds.length >= 4 && pattern.confidence === "high" ? "high" : validEvidenceIds.length >= 2 ? (pattern.confidence === "low" ? "low" : "medium") : "low";
 
+    // Stored as self-contained {id, title, location} records, not bare ids --
+    // a Meta-only campaign has no row in the local `campaigns` table to join
+    // against later, so a bare id would silently disappear from the evidence
+    // list the next time this run's patterns are displayed.
+    const evidence = validEvidenceIds.map((evidenceId) => {
+      const point = datasetById.get(evidenceId)!;
+      return { id: point.campaignId, title: point.title, location: point.location };
+    });
+
     rows.push({
       id: crypto.randomUUID(),
       runId,
@@ -221,7 +297,7 @@ export async function runCreativeAnalysis(): Promise<CreativeAnalysisResult> {
       theme: pattern.theme,
       description: pattern.description,
       suggestedReuse: pattern.suggestedReuse,
-      evidenceCampaignIdsJson: JSON.stringify(validEvidenceIds),
+      evidenceCampaignIdsJson: JSON.stringify(evidence),
       avgCplCents,
       portfolioAvgCplCents,
       confidence,
@@ -263,11 +339,6 @@ export async function getLatestCreativeInsights(): Promise<{
   if (!latestRun) return { state: state ?? null, insights: [] };
 
   const rows = await db.select().from(creativeInsights).where(eq(creativeInsights.runId, latestRun.runId));
-  const allCampaignIds = [...new Set(rows.flatMap((row) => JSON.parse(row.evidenceCampaignIdsJson) as string[]))];
-  const campaignRows = allCampaignIds.length > 0
-    ? await db.select({ id: campaigns.id, title: campaigns.title, location: campaigns.location }).from(campaigns).where(inArray(campaigns.id, allCampaignIds))
-    : [];
-  const campaignById = new Map(campaignRows.map((row) => [row.id, row]));
 
   const insights: CreativeInsightWithEvidence[] = rows
     .map((row) => ({
@@ -279,9 +350,7 @@ export async function getLatestCreativeInsights(): Promise<{
       confidence: row.confidence,
       avgCplCents: row.avgCplCents,
       portfolioAvgCplCents: row.portfolioAvgCplCents,
-      evidence: (JSON.parse(row.evidenceCampaignIdsJson) as string[])
-        .map((id) => campaignById.get(id))
-        .filter((row): row is { id: string; title: string; location: string } => Boolean(row)),
+      evidence: JSON.parse(row.evidenceCampaignIdsJson) as Array<{ id: string; title: string; location: string }>,
     }))
     .sort((a, b) => (a.kind !== b.kind ? (a.kind === "winner" ? -1 : 1) : CONFIDENCE_RANK[b.confidence] - CONFIDENCE_RANK[a.confidence]));
 

@@ -639,7 +639,7 @@ export async function setMetaAdStatus(metaAdId: string, status: "ACTIVE" | "PAUS
   await metaRequest(`/${metaAdId}`, credentials.accessToken, { method: "POST", params: { status } });
 }
 
-type MetaAdCreativeDetails = {
+export type MetaAdCreativeDetails = {
   adSetId: string;
   status: string;
   linkData: { message: string; name: string; description: string; link: string; callToAction: Record<string, unknown> };
@@ -653,7 +653,7 @@ type MetaAdCreativeDetails = {
  * it's replacing, even for ads this platform didn't itself create (imported
  * campaigns have no local record of their copy).
  */
-async function fetchAdCreativeDetails(metaAdId: string): Promise<MetaAdCreativeDetails> {
+export async function fetchAdCreativeDetails(metaAdId: string): Promise<MetaAdCreativeDetails> {
   const credentials = getMetaCredentials();
   if (!credentials) throw new Error("Meta is not configured");
 
