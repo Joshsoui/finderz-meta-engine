@@ -471,3 +471,26 @@ export const creativeInsights = sqliteTable(
   },
   (table) => [index("idx_creative_insights_run").on(table.runId)]
 );
+
+/**
+ * The Creative Builder's output: a new ad-copy variant for one campaign,
+ * generated to concretely apply the Analyst's current winning patterns --
+ * reviewed and approved by a human (never auto-applied to a live Meta ad,
+ * same shadow-mode principle as the rest of this intelligence layer).
+ */
+export const creativeVariants = sqliteTable(
+  "creative_variants",
+  {
+    id: text("id").primaryKey(),
+    campaignId: text("campaign_id").notNull().references(() => campaigns.id),
+    headline: text("headline").notNull(),
+    primaryText: text("primary_text").notNull(),
+    descriptionText: text("description_text").notNull(),
+    uspsJson: text("usps_json").notNull(),
+    /** Which winning pattern(s) this variant applies and why, in Dutch -- so approving isn't a leap of faith. */
+    rationale: text("rationale").notNull(),
+    status: text("status", { enum: ["review", "approved", "dismissed"] }).notNull().default("review"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_creative_variants_campaign").on(table.campaignId)]
+);

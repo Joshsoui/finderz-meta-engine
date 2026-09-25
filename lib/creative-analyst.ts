@@ -287,3 +287,19 @@ export async function getLatestCreativeInsights(): Promise<{
 
   return { state: state ?? null, insights };
 }
+
+export type WinnerPattern = { id: string; theme: string; suggestedReuse: string };
+
+/** The Creative Builder's context: only the latest run's winner patterns -- a watchout is something to avoid, not something to feed into a new variant. */
+export async function getLatestWinnerPatterns(): Promise<WinnerPattern[]> {
+  const db = await getDb();
+  const [latestRun] = await db.select({ runId: creativeInsights.runId }).from(creativeInsights).orderBy(desc(creativeInsights.createdAt)).limit(1);
+  if (!latestRun) return [];
+
+  const rows = await db
+    .select({ id: creativeInsights.id, theme: creativeInsights.theme, suggestedReuse: creativeInsights.suggestedReuse, kind: creativeInsights.kind })
+    .from(creativeInsights)
+    .where(eq(creativeInsights.runId, latestRun.runId));
+
+  return rows.filter((row) => row.kind === "winner").map(({ id, theme, suggestedReuse }) => ({ id, theme, suggestedReuse }));
+}

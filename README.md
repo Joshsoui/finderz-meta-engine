@@ -54,6 +54,12 @@ Meta-only recruitment campaign control voor Finderz Keeperz.
   scoort, met concrete, herbruikbare tekst als onderbouwing -- nooit alleen de ene campagne met
   het laagste getal. Handmatig te starten via "Analyseer nu"; vereist minimaal 4 campagnes met
   genoeg leads voor een betrouwbaar patroon. Zie `/analyse`. Architectuur: `lib/creative-analyst.ts`.
+- **Creative Builder** -- genereert per campagne een nieuwe advertentietekst-variant die de
+  Analyst's actuele winnende patronen concreet toepast (zelfde harde regels als de AI-copy bij
+  het aanmaken van een campagne: geen klantnaam, salaris als eerste USP, tekenlimieten). Altijd
+  ter review; goedkeuren past de tekst alleen automatisch toe op een campagne die nog concept is
+  -- een live advertentie wordt hier nooit automatisch aangepast. Zie `/creatives` (per
+  campagnekaart, onder "Testvariaties"). Architectuur: `lib/creative-builder.ts`.
 
 ## API
 
